@@ -25,10 +25,14 @@ In: `auth set/status/clear`, `trip list/create/view/add/remove/delete`,
 `tour list/view/copy`, `poi search/view`, `location search` (added
 during implementation: `trip create` cannot work without a destination
 key, see the corrections), the home view, and the shared
-HTTP/output/error/auth layers. Out (later milestones): rankings,
-nearby, comments, categories (designed in git history at `2834aac`), stop reordering and notes, `trip preview <id>` for shared trips,
-`skills/chictrip-axi/SKILL.md` generation with its `--check` gate,
-`setup hooks`.
+HTTP/output/error/auth layers. Added in milestone 3: `trip preview
+<trip-id>` for other people's trips, `setup skill` with its `--check`
+gate, and `setup hooks`. Out (later milestones): rankings, nearby, comments,
+categories (designed in git history at `2834aac`), stop reordering and
+notes, a local UUID check on positional ids (an id chicTrip rejects is
+reported as chicTrip reports it), `--full` on `trip view`/`trip preview`
+to show a stop's `note`, and hooks for Codex (`~/.codex/hooks.json`) and
+OpenCode (a managed plugin).
 
 ## Command tree
 
@@ -40,6 +44,7 @@ chictrip-axi auth clear
 chictrip-axi trip list [--limit N]
 chictrip-axi trip create --name NAME --start DATE --end DATE --location KEY... [--traffic MODE] [--duplicate]
 chictrip-axi trip view <trip-id> [--day N]
+chictrip-axi trip preview <trip-id> [--day N]
 chictrip-axi trip add <trip-id> --day N --poi POI-ID... [--position last|best] [--allow-duplicate]
 chictrip-axi trip remove <trip-id> --stop TSD-ID...
 chictrip-axi trip delete <trip-id>
@@ -49,6 +54,8 @@ chictrip-axi tour copy <tour-id>
 chictrip-axi poi search <keyword> [--near LAT,LNG] [--limit N]
 chictrip-axi poi view <poi-id> [--full]
 chictrip-axi location search <keyword> [--limit N]
+chictrip-axi setup skill [--check] [--out PATH]
+chictrip-axi setup hooks [--user] [--remove]
 ```
 
 Global flags, accepted by every command and never reported as unknown:
@@ -78,10 +85,10 @@ JWT, see protocol.md). `auth set` writes the auth file with mode 0600:
 which is exactly what the browser snippet in the README produces, so
 `auth set --from-json -` accepts it on stdin.
 
-- Commands under `trip`, plus `tour copy`, need a member token. When
-  the effective token is the embedded guest, they fail locally with
-  `auth_required` before any network call (the guest "member" would
-  otherwise answer with demo data).
+- Commands under `trip`, except `trip preview`, plus `tour copy`, need a
+  member token. When the effective token is the embedded guest, they
+  fail locally with `auth_required` before any network call (the guest
+  "member" would otherwise answer with demo data).
 - On `apiStatus 003` with a member token from the auth file and a
   refresh token present, the client calls `POST Token/Refresh`, saves
   the three new values, and retries the request once. Tokens from
@@ -160,13 +167,14 @@ auth: member
 trips[3]{id,name,start,end,days}:
   fd4db85c-...,Tokyo temples,2026/10/01,2026/10/03,3
   ...
-commands[15]{command,summary}:
+commands[18]{command,summary}:
   auth set,Store a member token copied from the browser
   auth status,Show which token is in use and whether it works
   auth clear,Forget the stored member token
   trip list,My trips (newest first)
   trip create --name --start --end,Create an empty trip
   trip view <trip-id>,Stops of a trip day by day
+  trip preview <trip-id>,Stops of any trip by id (no login needed)
   trip add <trip-id> --day N --poi ID...,Append POIs to a day (skips duplicates)
   trip remove <trip-id> --stop ID...,Remove stops
   trip delete <trip-id>,Delete a whole trip
@@ -174,15 +182,17 @@ commands[15]{command,summary}:
   tour view <tour-id>,An expert itinerary day by day
   tour copy <tour-id>,Copy an expert itinerary into my trips
   poi search <keyword>,Find places and their ids
-  poi view <poi-id>,Address, hours, rating, description of a place
+  poi view <poi-id>,Address and hours and rating and description of a place
   location search <keyword>,Destination keys for trip create
+  setup skill,Write the agent skill file (--check verifies it)
+  setup hooks,Install the Claude Code SessionStart hook on request
 help[2]:
   Run `chictrip-axi trip view <id>` to continue a trip above
   Run `chictrip-axi <command> --help` for flags, defaults, and examples
 ```
 
-The command index is the static part a future `SKILL.md` generator
-keeps; keep summaries to one clause.
+The command index is the static part the `setup skill` generator reads;
+keep summaries to one clause.
 
 ### auth set
 
@@ -555,7 +565,9 @@ the user's HOME.
   `{travelScheduleInfo, dayList}` shape as the guest-readable
   `TravelScheduleDetail/Preview?TravelScheduleId=` (protocol.md, "Shared
   trip previews"), so `trip view` can be developed and tested against
-  that fixture before a member token is available. The `Add` and
+  that fixture before a member token is available. Milestone 3 turned
+  that endpoint into `trip preview` and reuses the same fixture for both
+  commands' tests. The `Add` and
   `TravelScheduleCopy` responses were not observed; confirm them in the
   live test and record them in protocol.md.
 - Repo rules: ASCII-only sources and comments, `just gate` green before
@@ -598,3 +610,162 @@ evidence.
 - `src/datetime.rs` (UTC calendar maths) exists instead of a date
   crate; the shared table builders live in `commands/mod.rs` so the
   noun modules do not depend on each other.
+
+## Milestone 3: trip previews and session integration
+
+Approved by the user on 2026-09-18 and implemented the same day. Three
+parts: `trip preview`, the two `setup` commands, and an evaluation of
+the encoder's quoting that deliberately changed nothing.
+
+### trip preview
+
+`chictrip-axi trip preview <trip-id> [--day N]` reads any trip by id.
+The id is usually the `preViewTravelId` of
+`https://www.chictrip.com.tw/?action=preView&preViewTravelId=<id>`.
+
+- chicTrip gates Preview on nothing but the id. Live on 2026-09-18 a
+  private trip created seconds earlier in the test account was readable
+  with the guest token, and answered `011 TravelSchedule has been
+  deleted` once deleted. "Shared by link" is a UI notion, not an API
+  one, so every surface says "any trip by id" and never promises that
+  an unshared trip stays private.
+
+- Endpoint `TravelScheduleDetail/Preview`, parameter `TravelScheduleId`
+  with a capital T (`TravelScheduleDetail/Get` spells the same thing
+  `travelScheduleId`). The embedded guest token is enough, so this is
+  the one `trip` command that does not call `member_client`.
+- One request. `trip view` first asks `VerifyUpdateTime` because a
+  mutation needs the trip's `updateTime`; a preview writes nothing, so
+  that call would buy nothing.
+- The header is the first five lines of `trip view`'s: `id`, `name`,
+  `start`, `end`, `days`. `permission` and `update_time` are dropped.
+  `permission` is the owner's value (a guest reading somebody's trip sees
+  `Owner`), so printing it would tell the agent it may write; the
+  `updateTime` chain only feeds mutations a viewer cannot make. The two
+  commands share `trip_header`, and `trip view`'s output is unchanged
+  byte for byte.
+- Stops come from `stops_table(&days, false, false)`, so the `tsd_id`
+  column is out as well: `trip remove` is the only command that takes
+  one and it needs a trip of my own.
+- `--day N` goes through the shared `select_days`, so a day outside the
+  itinerary is `not_found` naming the day count, decided after the one
+  request rather than with a second.
+- Errors: `011 TravelSchedule has been deleted` is what an unknown or
+  deleted id answers and `api/mod.rs` already maps 011 to `not_found`. A
+  missing or malformed `TravelScheduleId` answers the generic `002 A
+  non-empty request body is required` and stays `api_error`; validating
+  the id shape locally is out of scope (see Scope).
+- `help` is two lines: `poi view <poi_id>` for a stop, and
+  `trip add <my-trip-id> --day <n> --poi <poi_id>` to copy a stop into a
+  trip of my own.
+
+Against the `trip_detail.json` fixture (three days, one stop):
+
+```
+trip:
+  id: "3c1d0a2e-1111-4111-8111-111111111111"
+  name: Tokyo temples
+  start: 2026/10/01
+  end: 2026/10/03
+  days: 3
+stops[1]{day,seq,arrive,stay_min,name,type,city,poi_id}:
+  1,1,"09:00",60,Azumabashi pier,basic,Tokyo,"edd5509c-d852-41d1-9d27-0139d6d9f8f5"
+help[2]: "Run `chictrip-axi poi view <poi_id>` for a stop","Run `chictrip-axi trip add <my-trip-id> --day <n> --poi <poi_id>` to copy a stop into my own trip"
+```
+
+### setup skill and setup hooks
+
+AXI section 7 asks for both a session hook (ambient context, live state,
+per-session token cost) and an installable skill (on-demand, static, no
+per-session cost), presented as two ways to the same end of which a user
+needs one. `setup` is a noun of its own so that neither is ever
+installed as a side effect of an ordinary command, and `commands::setup`
+is dispatched without a `Context`, which makes "touches no network" a
+property the compiler enforces.
+
+`setup skill [--check] [--out PATH]` writes
+`skills/chictrip-axi/SKILL.md` (the flat layout `npx skills add` reads).
+The compromise on content: the prose lives in
+`src/commands/skill_template.md`, compiled in with `include_str!`, and
+the generator substitutes two placeholders, `{{description}}` with
+`cli::DESCRIPTION` and `{{commands}}` with one bullet per `COMMAND_INDEX`
+row. Fully generating the file would mean encoding every sentence in
+Rust; fully hand-writing it would let the command list drift. No version
+number is embedded, so cutting a release never rewrites the file.
+
+| Invocation | Result |
+|---|---|
+| `--check`, file missing | `not_found`, help names `setup skill`, exit 1 |
+| `--check`, identical | `status: current`, exit 0 |
+| `--check`, different | `conflict`, help names `setup skill`, exit 1 |
+| write, identical | no write, `status: unchanged` |
+| write | `status: written` |
+
+`cargo run -- setup skill --check` is the last step of `just gate` and a
+step of the CI `test` job, so a hand edit or a stale copy fails the
+build. Agents install the published skill with `npx skills add
+qq88976321/chictrip-axi --skill chictrip-axi`; `--skill` is required
+because the repository also vendors the `axi` design skill.
+
+`setup hooks [--user] [--remove]` targets Claude Code only. It edits
+`.claude/settings.json` under the current directory, or
+`$CLAUDE_CONFIG_DIR/settings.json` (default `~/.claude`) with `--user`,
+and appends one group to `hooks.SessionStart`:
+
+```json
+{"hooks": [{"type": "command", "command": "chictrip-axi --timeout 5", "timeout": 10}]}
+```
+
+- No `matcher` key. Omitting it is how Claude Code spells "every start
+  reason": startup, resume, clear, compact, fork.
+- The command is the bare binary name when the first `chictrip-axi` on
+  `PATH` canonicalizes to this executable, and the canonical absolute
+  path otherwise (double quoted when it contains a space, since the
+  command runs through `sh -c`). A bare name keeps a global install
+  portable between machines; a pinned path stops the hook running some
+  other build.
+- Idempotent: a second run with the same command is `unchanged` and
+  writes nothing. Repair: a hook of ours whose command has gone stale
+  has only its `command` replaced, so a `matcher` or `timeout` the user
+  added survives. Remove: only hooks whose first shell word is named
+  `chictrip-axi` are taken out, an emptied group is dropped, and an
+  emptied `SessionStart` and `hooks` go with it; nothing to remove is
+  `absent`, exit 0.
+- A settings file that is not JSON, or whose `hooks` or
+  `hooks.SessionStart` is not the documented shape, is a `conflict` that
+  names the file. The command never rewrites a file it cannot read.
+- Known behaviour, accepted: the home view exits 1 when its one live
+  call fails, and Claude Code does not inject the stdout of a hook that
+  exited non-zero. A session started while chicTrip is unreachable gets
+  no context at all, not even the command index the CLI still prints.
+- `serde_json` is declared with `features = ["preserve_order"]` so a
+  settings file keeps its key order across an edit. `toon-format`
+  already enabled it and `indexmap` was already in `Cargo.lock`; naming
+  it stops that from being an accident of the dependency graph.
+
+### TOON quoting: evaluated, kept toon-format 0.5 unchanged
+
+Almost every id in this CLI's output is printed quoted, which costs two
+tokens a row. The evaluation:
+
+- TOON spec v4.1 (2026-07-26) section 7.2 requires quoting only for a
+  value that *starts* with `-`. `toon-format` 0.5.0 puts `-` in its
+  `STRUCTURAL_CHARS`, so every string containing a hyphen is quoted:
+  every UUID. That is the crate being stricter than the spec. The
+  quoting of `09:00` is the spec's own rule, not the crate's.
+- The one crate tracking v4.1, `etoon` 0.8.0, is encoder-only, takes
+  JSON bytes rather than a serde value, depends on `sonic-rs` (a risk
+  for the musl and aarch64 release builds), and has a single star. Not
+  a swap worth making for a personal tool.
+- A short-id lookup table (print `t1`, accept `t1` back) was rejected
+  outright. `trip add --poi`, `trip remove --stop`, `trip view <id>`,
+  and every `help` line hand ids back to the agent verbatim; a mapping
+  would have to survive between processes, which means per-machine
+  state, which means an id that means different things on two machines.
+- The fallback, if the cost ever matters: about 150 lines in this repo
+  encoding the four node kinds the output layer produces (scalar, list,
+  table, object) to v4.1 quoting rules, replacing `toon_format::encode_default`
+  at the one call site in `output.rs`.
+
+Decision: change nothing. The CLAUDE.md rule stands - the encoder's
+quoting is the encoder's rule, and no command hand-rolls around it.
