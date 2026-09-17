@@ -9,11 +9,19 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
 
 ## Quick facts
 
-- Milestone: infrastructure only (2026-09-17). The binary has no API
-  commands yet: bare invocation prints the home view; `--help`,
-  `--version`, and the 0/1/2 exit-code mapping exist. API commands,
-  the TOON output layer, `skills/chictrip-axi/SKILL.md`, and
-  `setup hooks` are the next milestone.
+- Milestone: the write vertical slice (2026-09-18). Fourteen commands
+  (`auth set/status/clear`, `trip list/create/view/add/remove/delete`,
+  `tour list/view/copy`, `poi search/view`) plus the home view, over
+  the shared HTTP/output/error/auth layers. Designed in
+  `docs/design/axi-interface.md`, which also lists what was left out.
+  Verified live the same day against api.chictrip.com.tw with a member
+  token, `trip create` included once it sent a real system cover id:
+  chicTrip's `TravelSchedule/AddV2` answers the generic `002 A non-empty
+  request body is required` when `CoverMediaId` or the label id is
+  empty or `LocationKey[]` is missing (`docs/api/protocol.md`). Next
+  milestone:
+  `skills/chictrip-axi/SKILL.md` generated from the home view's command
+  index with a `--check` gate, and `setup hooks`.
 - Published 2026-09-17: PUBLIC GitHub repo `qq88976321/chictrip-axi`
   (remote `origin`, https), pushed by the user. VERIFIED the same day
   via the Actions API: the ci workflow is green on master and the
@@ -30,11 +38,15 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   1.85 (the edition floor). The CI msrv job stays commented until a
   1.85 build is verified.
 - Dependencies (do not add more without user confirmation): clap
-  (derive), anyhow, thiserror. Scouted for the next milestone but NOT
-  added: an HTTP client, serde, a TOON serializer (`toon-format` 0.5 or
-  `serde_toon_format` 0.1 on crates.io). Dev tools installed
+  (derive), anyhow, thiserror, ureq 3 (`json` feature; sync, rustls, so
+  the musl release build keeps working), serde (derive), serde_json,
+  toon-format 0.5 (`default-features = false`: the default `cli`
+  feature drags in a TUI stack). No dev-dependencies: the integration
+  test uses `std::net::TcpListener` and `std::process::Command` with
+  `env!("CARGO_BIN_EXE_chictrip-axi")`. Dev tools installed
   out-of-band (NOT Cargo deps): cargo-release, git-cliff (CHANGELOG.md,
-  config in cliff.toml), Zensical (docs, via uvx), shellcheck
+  config in cliff.toml), Zensical (docs, via uvx; inside the sandbox it
+  needs `UV_TOOL_DIR`/`UV_CACHE_DIR` pointed at `$TMPDIR`), shellcheck
   (install.sh).
 - AXI design skill: installed (2026-09-17) with
   `npx skills add kunchenguid/axi`. The canonical copy is
@@ -67,12 +79,31 @@ just site-build / site-serve  # Zensical docs site (website/)
 
 ## Module map (src/) - lib + thin bin
 
-- main.rs   entrypoint: parse CLI, print the home view, map errors to
-            exit codes (AxiError::exit_code, otherwise 1)
-- lib.rs    module list; the binary is thin so the pure parts are
-            unit-tested without spawning a process
-- cli.rs    clap `Cli` (no subcommands yet) + `home_view()` (pure)
-- error.rs  thiserror `AxiError`: Usage -> exit 2, Failed -> exit 1
+- main.rs      entrypoint: parse argv (a clap rejection becomes the
+               usage error on stdout with the command's flags inline),
+               dispatch, render, exit
+- lib.rs       module list; the binary is thin so the pure parts are
+               unit-tested without spawning a process
+- cli.rs       clap tree (Cli, GlobalArgs, one Command enum per noun),
+               `Context` (global flags -> Client), dispatch,
+               `flags_for_argv` for the usage error
+- output.rs    ordered `Document`/`Table`, truncation, `--fields`
+               projection, render_toon / render_json
+- error.rs     `AxiError { code, message, help, flags, request_id }`
+               and its exit code; `ErrorCode` is the stable vocabulary
+- auth.rs      auth file (0600), token precedence, JWT decoding,
+               GUEST_TOKEN with its provenance
+- datetime.rs  UTC calendar maths (no date crate for 60 lines)
+- api/mod.rs   Client: envelope parsing, apiStatus -> AxiError,
+               003 -> refresh -> replay once
+- api/types.rs all-optional serde structs, unknown fields ignored
+- api/trips.rs the multi-call recipes and the updateTime chain
+- commands/    mod.rs holds what more than one noun needs (validation,
+               value conversions, the trip and stop tables); auth.rs,
+               home.rs, poi.rs, tour.rs, trip.rs are one noun each and
+               return a Document, never formatting or error text
+- tests/cli.rs the binary against a `TcpListener` fixture server, with
+               trimmed captures under tests/fixtures/
 
 ## CLI design: AXI (agent-ergonomic)
 
@@ -105,6 +136,9 @@ reliability is the other. Concretely:
   explicit request only, never on first run.
 - Implement these once in a shared output/error layer; never
   re-implement the pattern inside a command module.
+- The toon-format encoder quotes any value containing `-`, `:`, or a
+  brace, so UUIDs, clock times, and most `help` lines come out quoted.
+  That is the encoder's rule, not ours; do not hand-roll around it.
 
 ## Distribution
 
