@@ -15,14 +15,18 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   the TOON output layer, `skills/chictrip-axi/SKILL.md`, and
   `setup hooks` are the next milestone.
 - Published 2026-09-17: PUBLIC GitHub repo `qq88976321/chictrip-axi`
-  (remote `origin`, https), pushed by the user. Whether the ci workflow
-  went green and whether Pages is enabled were NOT verified from an
-  agent session yet (check `gh run list` / the Pages settings and
-  update this line). Development on branch `master` (cargo-release
-  `allow-branch = ["master"]`). The version line starts at 0.0.1:
-  v0.0.1 is the first tag, cut locally on 2026-09-17; pushing it
-  (`git push origin master --follow-tags`) is USER-ONLY. Later releases
-  are `just release patch|minor|major`.
+  (remote `origin`, https), pushed by the user. VERIFIED the same day
+  via the Actions API: the ci workflow is green on master and the
+  release workflow published v0.0.1 (tag + GitHub Release with assets).
+  Pages is enabled, but its first two runs failed at
+  `actions/configure-pages` because they ran before Pages was switched
+  to "GitHub Actions"; the site stays 404 until the workflow is re-run
+  (`gh workflow run pages.yml`, USER-ONLY). Delete the STATUS block in
+  pages.yml once a deployment succeeds. Development on branch `master`
+  (cargo-release `allow-branch = ["master"]`). The version line starts
+  at 0.0.1 (first tag v0.0.1, 2026-09-17); later releases are
+  `just release patch|minor|major` and tags are SSH-signed
+  (release.toml `sign-tag`). Pushing is USER-ONLY.
 - Toolchain: `cargo`/rustc 1.97.1 locally. Rust edition 2024, MSRV =
   1.85 (the edition floor). The CI msrv job stays commented until a
   1.85 build is verified.
