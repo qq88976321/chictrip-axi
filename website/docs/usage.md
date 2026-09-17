@@ -4,9 +4,11 @@
 chictrip-axi [COMMAND] [OPTIONS]
 ```
 
-Fifteen commands over the chicTrip API. Reads work with no setup; the
-trip commands need a member token copied out of the browser. Sample
-values below are romanized, the live API answers in zh-TW.
+Eighteen commands: sixteen over the chicTrip API, plus the two `setup`
+commands that wire the CLI into an agent's session. Reads work with no
+setup; the trip commands, other than `trip preview`, need a member token
+copied out of the browser. Sample values below are romanized, the live
+API answers in zh-TW.
 
 ## Home view
 
@@ -21,7 +23,7 @@ auth: guest
 tours[5]{id,name,destination,expert,likes}:
   "daebf5f2-...",Tokyo 7 days 6 nights,Japan,Mamo,4014
   ...
-commands[14]{command,summary}:
+commands[18]{command,summary}:
   auth set,Store a member token copied from the browser
   ...
 help[2]: ...
@@ -51,6 +53,14 @@ still needs to know what this tool does.
 | `tour list [--curated] [--page N] [--limit N]` | Popular expert itineraries, or the editor picks |
 | `tour view <tour-id> [--day N] [--full]` | An expert itinerary day by day |
 | `location search <keyword> [--limit N]` | Destination keys (country,city,area) for `trip create` |
+| `trip preview <trip-id> [--day N]` | Stops of any trip by id, without owning it |
+
+`trip preview` is the only `trip` command the guest token can run. It
+reads any trip whose id you have, shared or not: chicTrip gates the
+endpoint on nothing but the id (verified live with a freshly created
+private trip). One request, and the output leaves out the owner-only
+`permission`, `update_time`, and `tsd_id` a viewer cannot act on. The id
+is usually the `preViewTravelId` of a chicTrip share link.
 
 ### Your account
 
@@ -94,9 +104,9 @@ request; a token passed with `--token` or `CHICTRIP_AXI_TOKEN` is never
 rewritten.
 
 Token precedence: `--token`, then `CHICTRIP_AXI_TOKEN`, then the auth
-file, then chicTrip's public guest token. Trip commands refuse the
-guest token locally, before any request, because chicTrip would answer
-with the demo account's data instead.
+file, then chicTrip's public guest token. Trip commands, `trip preview`
+excepted, refuse the guest token locally, before any request, because
+chicTrip would answer with the demo account's data instead.
 
 ## Plan a trip and write it
 
@@ -106,6 +116,7 @@ chictrip-axi trip create --name "Kyoto weekend" --start 2026-11-07 --end 2026-11
 chictrip-axi tour list --limit 5
 chictrip-axi tour view <tour-id> --day 1
 chictrip-axi tour copy <tour-id>                        # or start from an expert itinerary
+chictrip-axi trip preview <other-trip-id> --day 1       # or read somebody else's trip by id
 chictrip-axi trip view <trip-id>
 chictrip-axi poi search "Kamakura" --limit 5
 chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id>
@@ -117,6 +128,42 @@ Mutations are idempotent where they can be: `trip add` skips a POI the
 day already contains, `trip create` returns the existing trip when the
 name and dates match, and `trip delete` succeeds on a trip that is
 already gone. All three exit `0`.
+
+## Agent integration
+
+Two ways to hand an agent the same knowledge. Neither touches the
+network, and neither runs on its own: both are explicit commands.
+
+| Command | What it does |
+|---------|--------------|
+| `setup hooks [--user] [--remove]` | Installs, repairs, or removes the Claude Code `SessionStart` hook that prints the home view |
+| `setup skill [--check] [--out PATH]` | Writes the generated agent skill file, or verifies the committed one |
+
+`setup hooks` edits `.claude/settings.json` under the current directory,
+or `~/.claude/settings.json` with `--user` (`CLAUDE_CONFIG_DIR` is
+honoured). The hook it writes has no `matcher`, so it covers every start
+reason, and it runs this binary by bare name when `PATH` resolves to it
+and by absolute path otherwise. Re-running only repairs a moved binary,
+a stranger's hooks are left alone, and a settings file that will not
+parse is reported rather than rewritten.
+
+`setup skill` writes `skills/chictrip-axi/SKILL.md` from the same
+command index the home view prints, so the skill cannot describe a CLI
+that no longer exists; `--check` exits `1` with `error: conflict` when
+the committed file differs, which is how CI gates it. Agents install the
+published copy with:
+
+```
+npx skills add qq88976321/chictrip-axi --skill chictrip-axi
+```
+
+`--skill` is required because the repository also vendors the `axi`
+design skill.
+
+You need only one of them. The hook loads on every session and carries
+live state; the skill costs nothing until the agent recognises a
+matching task and works in any agent that reads skills. Both together is
+fine.
 
 ## Output
 

@@ -40,6 +40,8 @@ chictrip-axi poi search "Senso-ji"            # places and their ids
 chictrip-axi tour view <tour-id> --day 1      # an expert itinerary, one day
 chictrip-axi auth set --from-json -           # paste the token copied from the browser
 chictrip-axi trip add <trip-id> --day 2 --poi <poi-id>
+chictrip-axi trip preview <trip-id>           # any trip by id, no sign-in
+chictrip-axi setup hooks                      # home view at every agent session start
 ```
 
 Reads work with no setup at all. See [Usage](usage.md) for the command
@@ -50,10 +52,10 @@ contract.
 
 !!! note "Personal tool, built with heavy AI assistance (Claude Code)"
 
-    Fifteen commands over the chicTrip API: search places, read expert
-    itineraries, and build trips in your own account. It comes with no
-    warranty and no support commitment: issues and PRs are welcome and
-    may still go unanswered.
+    Eighteen commands: search places, read expert itineraries, build
+    trips in your own account, and wire the CLI into your agent's
+    session. It comes with no warranty and no support commitment:
+    issues and PRs are welcome and may still go unanswered.
 
     An independent project, not affiliated with or endorsed by chicTrip.
 
