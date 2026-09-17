@@ -14,12 +14,15 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   `--version`, and the 0/1/2 exit-code mapping exist. API commands,
   the TOON output layer, `skills/chictrip-axi/SKILL.md`, and
   `setup hooks` are the next milestone.
-- Not yet published: no git remote wired. Development on branch
-  `master` (cargo-release `allow-branch = ["master"]`). The version
-  line starts at 0.0.1: v0.0.1 is the first tag, cut locally on
-  2026-09-17 and not pushed. Later releases are
-  `just release patch|minor|major`. Releases and the publish chain in
-  docs/releasing.md are USER-ONLY.
+- Published 2026-09-17: PUBLIC GitHub repo `qq88976321/chictrip-axi`
+  (remote `origin`, https), pushed by the user. Whether the ci workflow
+  went green and whether Pages is enabled were NOT verified from an
+  agent session yet (check `gh run list` / the Pages settings and
+  update this line). Development on branch `master` (cargo-release
+  `allow-branch = ["master"]`). The version line starts at 0.0.1:
+  v0.0.1 is the first tag, cut locally on 2026-09-17; pushing it
+  (`git push origin master --follow-tags`) is USER-ONLY. Later releases
+  are `just release patch|minor|major`.
 - Toolchain: `cargo`/rustc 1.97.1 locally. Rust edition 2024, MSRV =
   1.85 (the edition floor). The CI msrv job stays commented until a
   1.85 build is verified.
