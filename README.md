@@ -10,10 +10,10 @@ Docs site: <https://qq88976321.github.io/chictrip-axi/>.
 
 ## Status
 
-Fifteen commands over the chicTrip API: search places, read expert
-itineraries, and build trips in your own account. Reads work with no
-setup at all; the trip commands need a token you copy out of the
-browser once. Every command was exercised against the live API on
+Eighteen commands: search places, read expert itineraries, build trips
+in your own account, and wire the CLI into your agent's session. Reads
+work with no setup at all, `trip preview` of any trip by id included;
+the other trip commands need a token you copy out of the browser once. The chicTrip commands were exercised against the live API on
 2026-09-18, the trip commands with a real member account.
 
 Personal tool, built with heavy AI assistance (Claude Code). I review
@@ -72,6 +72,7 @@ chictrip-axi poi search "Senso-ji"            # places and their ids
 chictrip-axi poi view <poi-id>                # address, hours, rating, description
 chictrip-axi tour list                        # popular expert itineraries
 chictrip-axi tour view <tour-id> --day 1      # one day of an itinerary
+chictrip-axi trip preview <trip-id>           # any trip by id, shared or not
 ```
 
 A bare invocation prints live content rather than help text:
@@ -83,7 +84,7 @@ auth: guest
 tours[5]{id,name,destination,expert,likes}:
   "daebf5f2-...",Tokyo 7 days 6 nights,Japan,Mamo,4014
   ...
-commands[14]{command,summary}:
+commands[18]{command,summary}:
   auth set,Store a member token copied from the browser
   ...
 help[2]: ...
@@ -119,6 +120,7 @@ chictrip-axi trip list
 chictrip-axi location search Kyoto                     # the --location key trip create needs
 chictrip-axi trip create --name "Kyoto weekend" --start 2026-11-07 --end 2026-11-08 --location 7,9,45
 chictrip-axi tour copy <tour-id>                       # or start from an expert itinerary
+chictrip-axi trip preview <other-trip-id> --day 1      # or read somebody else's trip by id
 chictrip-axi trip view <trip-id>                       # stops day by day, with the tsd_id
 chictrip-axi poi search "Kamakura" --limit 5           # find ids to add
 chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id>
@@ -179,7 +181,7 @@ help[1]: "Run `chictrip-axi poi search --help` for the flags and defaults and ex
 | `auth_invalid` | the stored token is expired and could not be refreshed |
 | `not_found` | unknown trip, POI, day, or stop |
 | `forbidden` | someone else's trip |
-| `conflict` | the trip changed under us twice in a row |
+| `conflict` | the trip changed under us twice in a row, or a generated file drifted |
 | `api_error` | anything else chicTrip refused; `message` is its own sentence |
 | `network` | connect, DNS, TLS, or timeout |
 | `internal` | chicTrip answered something we cannot parse |
@@ -196,10 +198,39 @@ Token precedence is `--token`, then `CHICTRIP_AXI_TOKEN`, then the auth
 file, then chicTrip's public guest token. The full contract lives on the
 [docs site](https://qq88976321.github.io/chictrip-axi/usage/).
 
+### Let your agent find it: hook or skill
+
+`chictrip-axi setup hooks` registers a Claude Code `SessionStart` hook in
+`.claude/settings.json` under the current directory, or in
+`~/.claude/settings.json` with `--user`. Every new session then opens
+with the home view already in context: which token is in use, your
+latest trips, and the command index. Re-running it is a no-op that only
+repairs the command when the binary moved, `--remove` takes it back out,
+and it leaves anyone else's hooks alone. No other command ever registers
+a hook.
+
+`chictrip-axi setup skill` writes `skills/chictrip-axi/SKILL.md`, a
+static [Agent Skill](https://agentskills.io) generated from the same
+command index the home view prints, so the two cannot drift
+(`setup skill --check` fails the build when the committed file does).
+Agents that read the skill format install it with:
+
+```
+npx skills add qq88976321/chictrip-axi --skill chictrip-axi
+```
+
+`--skill` is required because this repository also vendors the `axi`
+design skill.
+
+You need only one of the two. The hook costs tokens on every session and
+pays for it with live state; the skill costs nothing until the agent
+recognises a matching task, and works wherever skills do. Both together
+is fine.
+
 ## Development
 
 ```
-just gate          # fmt --check, clippy -D warnings, test, release build
+just gate          # fmt, clippy -D warnings, test, release build, skill check
 just test          # unit tests
 just build         # debug build
 just run -- --help
