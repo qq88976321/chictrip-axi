@@ -1,0 +1,33 @@
+{
+ "apiStatus": "001",
+ "data": [
+  {
+   "id": "3c1d0a2e-1111-4111-8111-111111111111",
+   "memberId": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+   "name": "Tokyo temples",
+   "startDate": "2026/10/01",
+   "endDate": "2026/10/03",
+   "totalDay": 3,
+   "trafficType": "Custom",
+   "createTime": 1789700000,
+   "updateTime": 1789710463,
+   "collaborationList": [],
+   "permission": "Owner"
+  },
+  {
+   "id": "5a196b01-2222-4222-8222-222222222222",
+   "memberId": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+   "name": "Kyoto",
+   "startDate": "2026/11/01",
+   "endDate": "2026/11/02",
+   "totalDay": 2,
+   "trafficType": "Transit",
+   "createTime": 1789600000,
+   "updateTime": 1789610463,
+   "collaborationList": [],
+   "permission": "Owner"
+  }
+ ],
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

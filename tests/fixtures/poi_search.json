@@ -1,0 +1,55 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "state": "result",
+  "totalCount": 0,
+  "hasNextPage": false,
+  "result": [
+   {
+    "id": "8a48a94c-495f-44da-be0d-e1d7564f2b07",
+    "name": "\u6d45\u8349\u5bfa",
+    "categoryType": "enterTainment",
+    "address": "2 Chome-3-1 Asakusa, Taito City, Tokyo 111-0032",
+    "longitude": 139.7963656,
+    "latitude": 35.7111163,
+    "ratingCount": 4.5,
+    "ratingTotal": 36177,
+    "favoriteCount": 22142,
+    "joinCount": 220669,
+    "placeId": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+    "location": {
+     "locationCountryName": "Japan",
+     "locationCityName": "Tokyo",
+     "locationAreaName": "Taito"
+    },
+    "tags": [
+     {
+      "name": "landmark",
+      "source": "cacafly"
+     }
+    ]
+   },
+   {
+    "id": "edd5509c-d852-41d1-9d27-0139d6d9f8f5",
+    "name": "Azumabashi pier",
+    "categoryType": "enterTainment",
+    "address": "1 Chome-23 Azumabashi, Sumida City, Tokyo 130-0001",
+    "longitude": 139.8005347,
+    "latitude": 35.7109946,
+    "ratingCount": 4,
+    "ratingTotal": 271,
+    "favoriteCount": 13,
+    "joinCount": 1503,
+    "placeId": "ChIJh-h-rMWOGGARlCveMkhqd4A",
+    "location": {
+     "locationCountryName": "Japan",
+     "locationCityName": "Tokyo",
+     "locationAreaName": "Sumida"
+    },
+    "tags": []
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

@@ -1,0 +1,19 @@
+{
+ "apiStatus": "001",
+ "data": [
+  {
+   "id": "0c32a566-3333-4333-8333-333333333333",
+   "name": "planning",
+   "isSystem": true,
+   "sort": 100
+  },
+  {
+   "id": "1eb4c5b1-4444-4444-8444-444444444444",
+   "name": "\u672a\u6a19\u7c64",
+   "isSystem": true,
+   "sort": 400
+  }
+ ],
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

@@ -1,0 +1,11 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "state": "result",
+  "totalCount": 0,
+  "hasNextPage": false,
+  "result": []
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

@@ -1,0 +1,64 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "travelScheduleInfo": {
+   "id": "3c1d0a2e-1111-4111-8111-111111111111",
+   "name": "Tokyo temples",
+   "startDate": "2026/10/01",
+   "endDate": "2026/10/03",
+   "totalDay": 3,
+   "trafficType": "Custom",
+   "updateTime": 1789710600,
+   "permission": "Owner",
+   "memberId": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
+  },
+  "dayList": [
+   {
+    "day": 1,
+    "date": "2026/10/01",
+    "tsdList": [
+     {
+      "id": "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "Azumabashi pier",
+      "tsdType": "basic",
+      "poiId": "edd5509c-d852-41d1-9d27-0139d6d9f8f5",
+      "day": 1,
+      "cityName": "Tokyo",
+      "categoryIcon": "pin",
+      "note": "",
+      "arrivalTime": "09:00",
+      "stayTime": 60,
+      "arrivalTrafficType": "Transit",
+      "arrivalTrafficTime": 12
+     },
+     {
+      "id": "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "name": "\u6d45\u8349\u5bfa",
+      "tsdType": "basic",
+      "poiId": "8a48a94c-495f-44da-be0d-e1d7564f2b07",
+      "day": 1,
+      "cityName": "Tokyo",
+      "categoryIcon": "pin",
+      "note": "",
+      "arrivalTime": "10:12",
+      "stayTime": 60,
+      "arrivalTrafficType": "Transit",
+      "arrivalTrafficTime": 12
+     }
+    ]
+   },
+   {
+    "day": 2,
+    "date": "2026/10/02",
+    "tsdList": []
+   },
+   {
+    "day": 3,
+    "date": "2026/10/03",
+    "tsdList": []
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

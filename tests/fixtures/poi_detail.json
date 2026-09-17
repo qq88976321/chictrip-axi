@@ -1,0 +1,67 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "id": "8a48a94c-495f-44da-be0d-e1d7564f2b07",
+  "name": "\u6d45\u8349\u5bfa",
+  "categoryType": "enterTainment",
+  "address": "2 Chome-3-1 Asakusa, Taito City, Tokyo 111-0032",
+  "longitude": 139.7963656,
+  "latitude": 35.7111163,
+  "ratingCount": 4.5,
+  "ratingTotal": 36177,
+  "favoriteCount": 22142,
+  "joinCount": 220669,
+  "placeId": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+  "location": {
+   "locationCountryName": "Japan",
+   "locationCityName": "Tokyo",
+   "locationAreaName": "Taito"
+  },
+  "tags": [
+   {
+    "name": "landmark",
+    "source": "cacafly"
+   }
+  ],
+  "description": "The grand gate at the entrance to Senso-ji, hung with a 3.9 metre lantern.",
+  "phoneNumber": "03-3842-0181",
+  "url": "http://www.senso-ji.jp/guide/guide01.html",
+  "openTimes": [
+   {
+    "code": "monday",
+    "name": "Monday",
+    "descript": "00:00-24:00"
+   },
+   {
+    "code": "tuesday",
+    "name": "Tuesday",
+    "descript": "00:00-24:00"
+   }
+  ],
+  "media": [
+   {
+    "id": "771e7d3e-778d-4149-bbe3-5b0f3778b724",
+    "type": "photo",
+    "source": "google",
+    "url": "https://lh3.googleusercontent.com/places/example=s1600-w480"
+   }
+  ],
+  "poiTickets": [
+   {
+    "id": "5bdddafd-cf11-4e64-8734-258b73feefb6",
+    "title": "Asakusa history walking tour",
+    "price": 1500,
+    "currency": "NT$",
+    "url": "https://www.kkday.com/zh-tw/product/616640"
+   }
+  ],
+  "cover": {
+   "id": "771e7d3e-778d-4149-bbe3-5b0f3778b724",
+   "type": "photo",
+   "source": "google",
+   "url": "https://lh3.googleusercontent.com/places/example=s1600-w480"
+  }
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

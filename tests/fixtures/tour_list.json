@@ -1,0 +1,33 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "nextPage": 2,
+  "expertTourDetailList": [
+   {
+    "travelScheduleId": "daebf5f2-191c-41a9-bc64-9b0700765a5c",
+    "name": "Tokyo 7 days 6 nights",
+    "destination": "Japan",
+    "expertName": "Mamo",
+    "likeCount": 4014,
+    "usedCount": 18052,
+    "tags": [
+     "7 days",
+     "photo spots"
+    ]
+   },
+   {
+    "travelScheduleId": "8c9b156f-7990-4d14-951e-a5e4ce3bc575",
+    "name": "Hakone and Kamakura 3 days",
+    "destination": "Japan",
+    "expertName": "Suiryoshuku",
+    "likeCount": 1310,
+    "usedCount": 4711,
+    "tags": [
+     "3 days"
+    ]
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

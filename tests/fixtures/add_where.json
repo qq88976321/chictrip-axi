@@ -1,0 +1,41 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "dayList": [
+   {
+    "day": 1,
+    "addWhereList": [
+     {
+      "addWhereId": "slot-1-first",
+      "sort": 0,
+      "isBestOfDay": false,
+      "isBestOfAll": true
+     },
+     {
+      "addWhereId": "slot-1-last",
+      "sort": 1,
+      "isBestOfDay": true,
+      "isBestOfAll": false
+     }
+    ]
+   },
+   {
+    "day": 2,
+    "addWhereList": [
+     {
+      "addWhereId": "slot-2-last",
+      "sort": 0,
+      "isBestOfDay": false,
+      "isBestOfAll": false
+     }
+    ]
+   },
+   {
+    "day": 3,
+    "addWhereList": []
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

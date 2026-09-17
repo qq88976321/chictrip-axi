@@ -1,0 +1,15 @@
+{
+ "apiStatus": "001",
+ "data": [
+  {
+   "id": "c0ffee00-1111-4111-8111-111111111111",
+   "value": "https://storage.chictrip.com.tw/system/c0ffee00-1111-4111-8111-111111111111.jpg"
+  },
+  {
+   "id": "c0ffee00-2222-4222-8222-222222222222",
+   "value": "https://storage.chictrip.com.tw/system/c0ffee00-2222-4222-8222-222222222222.jpg"
+  }
+ ],
+ "message": null,
+ "requestId": "req-1"
+}
