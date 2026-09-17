@@ -48,6 +48,11 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+    /// My trips: list, create, inspect, fill, and delete
+    Trip {
+        #[command(subcommand)]
+        command: TripCommand,
+    },
     /// Expert itineraries published on chicTrip
     Tour {
         #[command(subcommand)]
@@ -90,6 +95,87 @@ pub enum AuthCommand {
     #[command(after_help = "Examples:
   chictrip-axi auth clear")]
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TripCommand {
+    /// My trips, newest first
+    #[command(after_help = "Examples:
+  chictrip-axi trip list
+  chictrip-axi trip list --limit 5
+  chictrip-axi trip list --fields id,name,traffic,update_time")]
+    List {
+        /// Rows to print (1-200)
+        #[arg(long, value_name = "N", default_value_t = 20)]
+        limit: usize,
+    },
+    /// Create an empty trip
+    #[command(after_help = "Examples:
+  chictrip-axi trip create --name \"Tokyo temples\" --start 2026-10-01 --end 2026-10-03
+  chictrip-axi trip create --name \"Kyoto\" --start 2026/11/01 --end 2026/11/04 --traffic Transit --location 7,9,0
+Re-running with the same name and dates returns the existing trip; --duplicate forces a second one.")]
+    Create {
+        #[arg(long, value_name = "NAME")]
+        name: String,
+        /// First day, YYYY-MM-DD or YYYY/MM/DD
+        #[arg(long, value_name = "DATE")]
+        start: String,
+        /// Last day, inclusive
+        #[arg(long, value_name = "DATE")]
+        end: String,
+        /// Custom, Transit, Driving, Walk, or PublicTransport
+        #[arg(long, value_name = "MODE", default_value = "Custom")]
+        traffic: String,
+        /// Destination key like 7,7,0 (country,city,area); at least one, repeatable
+        #[arg(long, value_name = "KEY", required = true)]
+        location: Vec<String>,
+        /// Create another trip even if one with the same name and dates exists
+        #[arg(long)]
+        duplicate: bool,
+    },
+    /// Stops of a trip day by day
+    #[command(after_help = "Examples:
+  chictrip-axi trip view 3c1d0a2e-0000-0000-0000-000000000000
+  chictrip-axi trip view 3c1d0a2e-0000-0000-0000-000000000000 --day 1")]
+    View {
+        trip_id: String,
+        /// Keep only this day
+        #[arg(long, value_name = "N")]
+        day: Option<i64>,
+    },
+    /// Append POIs to a day, skipping ones already there
+    #[command(after_help = "Examples:
+  chictrip-axi trip add <trip-id> --day 1 --poi 8a48a94c-495f-44da-be0d-e1d7564f2b07
+  chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id> --position best")]
+    Add {
+        trip_id: String,
+        #[arg(long, value_name = "N")]
+        day: i64,
+        /// POI id from `poi search`; repeatable, added in order
+        #[arg(long = "poi", value_name = "POI-ID", required = true)]
+        poi: Vec<String>,
+        /// last appends to the end of the day, best uses chicTrip's suggestion
+        #[arg(long, value_name = "WHERE", default_value = "last")]
+        position: String,
+        /// Add a POI even when the day already contains it
+        #[arg(long)]
+        allow_duplicate: bool,
+    },
+    /// Remove stops by their tsd_id
+    #[command(after_help = "Examples:
+  chictrip-axi trip remove <trip-id> --stop <tsd-id>
+  chictrip-axi trip remove <trip-id> --stop <tsd-id> --stop <tsd-id>
+tsd_id comes from `chictrip-axi trip view <trip-id>`.")]
+    Remove {
+        trip_id: String,
+        #[arg(long = "stop", value_name = "TSD-ID", required = true)]
+        stop: Vec<String>,
+    },
+    /// Delete a whole trip
+    #[command(after_help = "Examples:
+  chictrip-axi trip delete <trip-id>
+Deleting a trip that is already gone succeeds as a no-op.")]
+    Delete { trip_id: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -192,6 +278,7 @@ pub fn run(cli: Cli) -> Result<Document, AxiError> {
     let mut doc = match &cli.command {
         None => commands::home::run(&ctx)?,
         Some(Command::Auth { command }) => commands::auth::run(&ctx, command)?,
+        Some(Command::Trip { command }) => commands::trip::run(&ctx, command)?,
         Some(Command::Tour { command }) => commands::tour::run(&ctx, command)?,
         Some(Command::Poi { command }) => commands::poi::run(&ctx, command)?,
     };

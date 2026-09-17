@@ -19,6 +19,15 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "Show which token is in use and whether it works",
     ),
     ("auth clear", "Forget the stored member token"),
+    ("trip list", "My trips (newest first)"),
+    ("trip create --name --start --end", "Create an empty trip"),
+    ("trip view <trip-id>", "Stops of a trip day by day"),
+    (
+        "trip add <trip-id> --day N --poi ID...",
+        "Append POIs to a day (skips duplicates)",
+    ),
+    ("trip remove <trip-id> --stop ID...", "Remove stops"),
+    ("trip delete <trip-id>", "Delete a whole trip"),
     (
         "tour list",
         "Popular expert itineraries (--curated for editor picks)",
