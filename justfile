@@ -34,3 +34,17 @@ gate:
 # Run the binary; pass extra args, e.g. `just run -- --help`.
 run *args:
     cargo run -- {{args}}
+
+# cargo-release sets NEW_VERSION and DRY_RUN; on a dry run the
+# changelog is left untouched so the working tree stays clean. Needs
+# git-cliff on PATH.
+# cargo-release pre-release hook: gate, then regenerate CHANGELOG.md.
+release-hook:
+    just gate
+    if [ "$DRY_RUN" != "true" ]; then git-cliff --tag "v${NEW_VERSION}" -o CHANGELOG.md; fi
+
+# First release: `just release 0.1.0` (explicit version -> tag v0.1.0,
+# no patch bump); afterwards `just release patch|minor|major`.
+# Bump version and tag vX.Y.Z locally (no push).
+release level="patch":
+    cargo release {{level}} --execute
