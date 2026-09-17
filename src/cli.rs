@@ -69,7 +69,7 @@ pub enum Command {
         #[command(subcommand)]
         command: LocationCommand,
     },
-    /// Agent integrations: the installable skill file
+    /// Agent integrations: the installable skill file and the Claude Code hook
     Setup {
         #[command(subcommand)]
         command: SetupCommand,
@@ -95,6 +95,20 @@ pub enum SetupCommand {
             default_value = "skills/chictrip-axi/SKILL.md"
         )]
         out: PathBuf,
+    },
+    /// Install the Claude Code SessionStart hook that prints the home view
+    #[command(after_help = "Examples:
+  chictrip-axi setup hooks
+  chictrip-axi setup hooks --user
+  chictrip-axi setup hooks --remove
+Edits .claude/settings.json under the current directory, or ~/.claude/settings.json with --user. Nothing else ever registers a hook.")]
+    Hooks {
+        /// Edit ~/.claude/settings.json instead of this project's
+        #[arg(long)]
+        user: bool,
+        /// Uninstall the hook instead of installing it
+        #[arg(long)]
+        remove: bool,
     },
 }
 

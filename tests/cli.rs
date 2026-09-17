@@ -785,6 +785,183 @@ fn setup_skill_check_fails_when_the_file_is_missing_or_edited() {
     );
 }
 
+fn settings_of(project: &Path) -> serde_json::Value {
+    let raw =
+        std::fs::read_to_string(project.join(".claude/settings.json")).expect("settings.json");
+    serde_json::from_str(&raw).expect("settings.json is JSON")
+}
+
+#[test]
+fn setup_hooks_installs_repairs_and_removes_only_our_session_start_hook() {
+    let sandbox = Sandbox::new("hooks");
+    let project = sandbox.project();
+    let empty_dir = sandbox.dir.join("empty-path");
+    std::fs::create_dir_all(&empty_dir).unwrap();
+    let path = [("PATH", empty_dir.to_str().unwrap())];
+    let exe = Path::new(env!("CARGO_BIN_EXE_chictrip-axi"))
+        .canonicalize()
+        .unwrap();
+    let pinned = format!("{} --timeout 5", exe.display());
+
+    let (stdout, code) = run_in(&sandbox, &project, &path, &["setup", "hooks"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.starts_with("app: \"claude-code\"\n"), "{stdout}");
+    assert!(stdout.contains("event: SessionStart\n"), "{stdout}");
+    assert!(
+        stdout.contains(&format!("command: \"{pinned}\"\n")),
+        "{stdout}"
+    );
+    assert!(stdout.contains("status: installed\n"), "{stdout}");
+
+    let file = project.join(".claude/settings.json");
+    let raw = std::fs::read_to_string(&file).unwrap();
+    assert!(raw.ends_with("}\n"), "{raw}");
+    assert!(raw.contains("\n  \"hooks\": {"), "two-space indent: {raw}");
+    let hook = &settings_of(&project)["hooks"]["SessionStart"][0]["hooks"][0];
+    assert_eq!(hook["type"], "command");
+    assert_eq!(hook["command"], pinned);
+    assert_eq!(hook["timeout"], 10);
+    assert!(
+        settings_of(&project)["hooks"]["SessionStart"][0]
+            .get("matcher")
+            .is_none(),
+        "no matcher means every start reason"
+    );
+
+    let (stdout, code) = run_in(&sandbox, &project, &path, &["setup", "hooks"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: unchanged\n"), "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        raw,
+        "a no-op writes nothing"
+    );
+
+    std::fs::write(
+        &file,
+        concat!(
+            "{\n",
+            "  \"permissions\": {\"allow\": [\"Bash(ls:*)\"]},\n",
+            "  \"hooks\": {\n",
+            "    \"SessionStart\": [\n",
+            "      {\"hooks\": [{\"type\": \"command\", \"command\": \"echo hi\"}]},\n",
+            "      {\"hooks\": [{\"type\": \"command\", \"command\": \"/old/chictrip-axi --timeout 5\", \"timeout\": 10}]}\n",
+            "    ]\n",
+            "  }\n",
+            "}\n"
+        ),
+    )
+    .unwrap();
+    let (stdout, code) = run_in(&sandbox, &project, &path, &["setup", "hooks"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: updated\n"), "{stdout}");
+    let settings = settings_of(&project);
+    assert_eq!(settings["permissions"]["allow"][0], "Bash(ls:*)");
+    assert_eq!(
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+        "echo hi"
+    );
+    assert_eq!(
+        settings["hooks"]["SessionStart"][1]["hooks"][0]["command"],
+        pinned
+    );
+
+    let (stdout, code) = run_in(&sandbox, &project, &path, &["setup", "hooks", "--remove"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: removed\n"), "{stdout}");
+    assert!(!stdout.contains("command:"), "{stdout}");
+    let settings = settings_of(&project);
+    assert_eq!(
+        settings["hooks"]["SessionStart"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        settings["hooks"]["SessionStart"][0]["hooks"][0]["command"],
+        "echo hi"
+    );
+
+    let (stdout, code) = run_in(&sandbox, &project, &path, &["setup", "hooks", "--remove"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: absent\n"), "{stdout}");
+}
+
+#[test]
+fn setup_hooks_uses_the_bare_name_when_path_resolves_to_this_binary() {
+    let sandbox = Sandbox::new("hooks-path");
+    let project = sandbox.project();
+    let bin = Path::new(env!("CARGO_BIN_EXE_chictrip-axi"))
+        .parent()
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    let (stdout, code) = run_in(&sandbox, &project, &[("PATH", bin)], &["setup", "hooks"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("command: \"chictrip-axi --timeout 5\"\n"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn setup_hooks_user_edits_the_claude_config_directory() {
+    let sandbox = Sandbox::new("hooks-user");
+    let project = sandbox.project();
+    let empty_dir = sandbox.dir.join("empty-path");
+    std::fs::create_dir_all(&empty_dir).unwrap();
+    let path = empty_dir.to_str().unwrap().to_string();
+
+    let (stdout, code) = run_in(
+        &sandbox,
+        &project,
+        &[("PATH", path.as_str())],
+        &["setup", "hooks", "--user"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("file: ~/.claude/settings.json\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("--remove --user"), "{stdout}");
+    assert!(sandbox.dir.join(".claude/settings.json").exists());
+
+    let config = sandbox.dir.join("cfg");
+    let (stdout, code) = run_in(
+        &sandbox,
+        &project,
+        &[
+            ("PATH", path.as_str()),
+            ("CLAUDE_CONFIG_DIR", config.to_str().unwrap()),
+        ],
+        &["setup", "hooks", "--user"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("file: ~/cfg/settings.json\n"), "{stdout}");
+    assert!(config.join("settings.json").exists());
+}
+
+#[test]
+fn setup_hooks_refuses_a_settings_file_it_cannot_parse() {
+    let sandbox = Sandbox::new("hooks-broken");
+    let project = sandbox.project();
+    let empty_dir = sandbox.dir.join("empty-path");
+    std::fs::create_dir_all(&empty_dir).unwrap();
+    let file = project.join(".claude/settings.json");
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "{ not json").unwrap();
+
+    let (stdout, code) = run_in(
+        &sandbox,
+        &project,
+        &[("PATH", empty_dir.to_str().unwrap())],
+        &["setup", "hooks"],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: conflict\n"), "{stdout}");
+    assert!(stdout.contains("settings.json"), "{stdout}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "{ not json");
+}
+
 #[test]
 fn an_unknown_path_is_reported_as_not_found() {
     let server = Server::start(|_, _| (404, "Not Found".to_string()));

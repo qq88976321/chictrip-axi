@@ -54,6 +54,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "setup skill",
         "Write the agent skill file (--check verifies it)",
     ),
+    (
+        "setup hooks",
+        "Install the Claude Code SessionStart hook on request",
+    ),
 ];
 
 pub fn run(ctx: &Context) -> Result<Document, AxiError> {

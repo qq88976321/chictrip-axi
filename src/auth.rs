@@ -94,7 +94,7 @@ pub fn display_path(path: &Path) -> String {
     }
 }
 
-fn env_var(name: &str) -> Option<String> {
+pub(crate) fn env_var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
