@@ -1,4 +1,4 @@
-# chicTrip API endpoint map
+# chicTrip API endpoint map (158 endpoints)
 
 Recovered on 2026-09-18 from the public SPA bundles at
 https://www.chictrip.com.tw/assets/*.js (Vite build). Base URL
@@ -7,7 +7,7 @@ Auth column: `guest` = works with the anonymous guest JWT, `member` =
 replies `002 Reject Guest Member`, `token` = works for guest but returns
 the guest member's own data, `apikey` = needs the SEO ApiKey header, `?` =
 not verified. Params are query-string names for GET, form fields
-otherwise. Only rows marked in the Auth column were exercised live.
+otherwise. Rows marked `(bundle)` in the Params column were read from the web app's request builders, not exercised live (this session had no member token); the rest of the marked rows were exercised live.
 
 ## Advertise (1)
 
@@ -54,7 +54,7 @@ otherwise. Only rows marked in the Auth column were exercised live.
 | POST | `/ExpertTour/TourGuide` |  |  |  |
 | POST | `/ExpertTour/TourGuideOption` |  |  |  |
 | GET | `/ExpertTour/TourV2` | guest | travelScheduleId | overview + dayList[].tsdList[]; 57 KB |
-| POST | `/ExpertTour/TravelScheduleCopy` |  |  |  |
+| POST | `/ExpertTour/TravelScheduleCopy` | member | travelScheduleId (bundle) | copies an expert tour into my trips |
 | POST | `/ExpertTour/TravelScheduleLike` |  |  |  |
 
 ## (root: Billboard) (4)
@@ -208,20 +208,23 @@ otherwise. Only rows marked in the Auth column were exercised live.
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| POST | `/TravelSchedule/AddV2` |  |  |  |
+| POST | `/TravelSchedule/AddV2` | member | CoverMediaId, Name, StartDate, EndDate, TotalDay, ViewMode=DetailMode, TravelScheduleUserLabelId, id="", TrafficType, IsForceUpdateTsdRoute=0, updateTime=0, destinationList[], LocationKey[] (urlencoded; bundle) | returns {id, name, updateTime, permission} |
 | POST | `/TravelSchedule/Copy` |  |  |  |
-| DELETE | `/TravelSchedule/DeleteDay` |  |  |  |
+| DELETE | `/TravelSchedule/Delete` | member | id (form; bundle) | whole trip; the bundle writes the path without a leading slash |
+| DELETE | `/TravelSchedule/DeleteDay` | member | id, DeleteDay, StartDate, EndDate, TotalDay, UpdateTime (bundle) |  |
+| PUT | `/TravelSchedule/SortDay` | member | (bundle: not traced) | reorder days; path has no leading slash in the bundle |
+| PUT | `/TravelSchedule/UpdateStartDate` | member | Id, StartDate, EndDate, updateTime (bundle) | the app uses it to add a day; no leading slash in the bundle |
 | GET | `/TravelSchedule/Get` |  |  |  |
 | GET | `/TravelSchedule/GetCollaboration` |  |  |  |
 | GET | `/TravelSchedule/GetCollaborationWithDetail` |  |  |  |
-| GET | `/TravelSchedule/GetMyAndCollaboration` | token | updateTime, orderByColumn, sort | guest sees 2 demo schedules |
+| GET | `/TravelSchedule/GetMyAndCollaboration` | token | updateTime=0, orderByColumn=updatetime, sort=desc | my trips + collaborations (live for guest demo data) |
 | GET | `/TravelSchedule/GetMyAndCollaborationWithTsdCount` | token | - | guest sees 2 demo schedules |
 | GET | `/TravelSchedule/GetNote` |  |  |  |
 | GET | `/TravelSchedule/GetSystemCoverList` | member | - | guest -> 002 |
 | GET | `/TravelSchedule/GetUpdateTravelScheduleInfo` |  |  |  |
 | GET | `/TravelSchedule/GetWithDetail` |  |  |  |
 | PUT | `/TravelSchedule/UpdateNote` |  |  |  |
-| PUT | `/TravelSchedule/UpdateV3` |  |  |  |
+| PUT | `/TravelSchedule/UpdateV3` | member | same shape as AddV2 plus id and updateTime (urlencoded; bundle) |  |
 
 ## TravelScheduleCollaboration (7)
 
@@ -239,12 +242,13 @@ otherwise. Only rows marked in the Auth column were exercised live.
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| POST | `/TravelScheduleDetail/Add` |  |  |  |
+| POST | `/TravelScheduleDetail/Add` | member | TravelScheduleId, Day, PoiId, AddWhereId, TravelScheduleUpdateTime, TsdCoverMediaId, TsdName (multipart; bundle) | returns {travelScheduleUpdateTime} |
 | POST | `/TravelScheduleDetail/AddByFavoritePoi` |  |  |  |
 | POST | `/TravelScheduleDetail/Copy` |  |  |  |
-| DELETE | `/TravelScheduleDetail/Delete` |  |  |  |
-| GET | `/TravelScheduleDetail/Get` | token | travelScheduleId, TravelScheduleUpdateTime, isMyTravelSchedule | see design doc for preview flow |
-| GET | `/TravelScheduleDetail/GetAddWhere` |  |  |  |
+| DELETE | `/TravelScheduleDetail/Delete` | member | TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime (body on DELETE; bundle) | returns the new updateTime |
+| GET | `/TravelScheduleDetail/Get` | token | travelScheduleId, TravelScheduleUpdateTime, isMyTravelSchedule | {travelScheduleInfo, dayList[].tsdList[]}; guest on a shared trip -> 006 (live) |
+| GET | `/TravelScheduleDetail/Preview` | guest | TravelScheduleId | shared-trip preview: {travelScheduleInfo, dayList} (live); no leading slash in the bundle |
+| GET | `/TravelScheduleDetail/GetAddWhere` | member | poiId, travelScheduleId, travelScheduleUpdateTime=0 (bundle) | dayList[].addWhereList[] insertion slots: addWhereId, arrival/departure tsd names, isBestOfDay, isBestOfAll |
 | GET | `/TravelScheduleDetail/GetAddWhereBestAll` |  |  |  |
 | GET | `/TravelScheduleDetail/GetDetail` |  |  |  |
 | GET | `/TravelScheduleDetail/GetEditInfo` |  |  |  |
@@ -257,10 +261,10 @@ otherwise. Only rows marked in the Auth column were exercised live.
 | PUT | `/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay` |  |  |  |
 | PUT | `/TravelScheduleDetail/SetFlightRoute` |  |  |  |
 | PUT | `/TravelScheduleDetail/SetRoute` |  |  |  |
-| PUT | `/TravelScheduleDetail/Sort` |  |  |  |
+| PUT | `/TravelScheduleDetail/Sort` | member | TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[], travelScheduleUpdateTime (bundle) |  |
 | PUT | `/TravelScheduleDetail/Update` |  |  |  |
 | PUT | `/TravelScheduleDetail/UpdateNote` |  |  |  |
-| GET | `/TravelScheduleDetail/VerifyUpdateTime` | guest | TravelScheduleId, travelScheduleUpdateTime | 004 Update time conflict returns the current updateTime |
+| GET | `/TravelScheduleDetail/VerifyUpdateTime` | guest | TravelScheduleId, travelScheduleUpdateTime | 001 or 004; data.updateTime is the current value (live) |
 
 ## TravelScheduleDetailRoute (3)
 
@@ -284,6 +288,6 @@ otherwise. Only rows marked in the Auth column were exercised live.
 |---|---|---|---|---|
 | POST | `/TravelScheduleUserLabel/Add` |  |  |  |
 | DELETE | `/TravelScheduleUserLabel/Delete` |  |  |  |
-| GET | `/TravelScheduleUserLabel/Get` | member | - | guest -> 002 |
+| GET | `/TravelScheduleUserLabel/Get` | member | - | labels; default = name "unlabeled" (zh-TW) with isSystem=true |
 | PUT | `/TravelScheduleUserLabel/Sort` |  |  |  |
 | PUT | `/TravelScheduleUserLabel/Update` |  |  |  |

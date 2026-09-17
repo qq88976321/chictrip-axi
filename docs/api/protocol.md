@@ -216,13 +216,138 @@ Location/GetPopularDestination: [{image, locationType, locationId, name,
   zoomLevel, latitude, longitude}]
 ```
 
-## Public itineraries that are NOT reachable anonymously
+## Shared trip previews: `GET TravelScheduleDetail/Preview`
 
 The sitemap advertises thousands of shared trips as
-`/?action=preView&preViewTravelId=<uuid>`. Loading one goes through
-`TravelScheduleDetail/VerifyUpdateTime` (answers `004` with the current
-`updateTime`) and then `TravelScheduleDetail/Get?travelScheduleId=&
-TravelScheduleUpdateTime=&isMyTravelSchedule=0`, which for the guest
-token answers `006 Quit collaboration`. The web app evidently exchanges
-the share link for collaboration access first (`TravelScheduleCollaboration/
-GetWithToken`, `AddWithToken`). Left for a later milestone.
+`/?action=preView&preViewTravelId=<uuid>`. The web app loads them with
+`GET TravelScheduleDetail/Preview?TravelScheduleId=<uuid>` (path
+without a leading slash in the bundle; works with the guest token) and
+gets `{travelScheduleInfo, dayList}`, the same shape as
+`TravelScheduleDetail/Get` returns for the owner. `TravelScheduleDetail/
+Get` itself answers `006 Quit collaboration` for a trip the token does
+not own or collaborate on. A missing `TravelScheduleId` is the usual
+"non-empty request body" message.
+
+`travelScheduleInfo` carries `id, name, startDate, endDate, totalDay,
+trafficType, updateTime, permission, viewMode, memberId, coverUrl,
+note, collaborationList[], destinationList[]` and more; `dayList[]` is
+`{day, date, trafficType, weatherInfo, tsdList[]}` with the `tsd` rows
+described under "Expert tour detail" (`id`, `name`, `tsdType`, `poiId`,
+`arrivalTime`, `stayTime`, `arrivalTrafficType`, `note`, ...).
+
+## Write flows (from the web app's request builders)
+
+Recovered from `TravelScheduleSettings.*.js`, `GlobalComponents.*.js`,
+and `home.*.js`; not exercised live in the exploration session (no
+member token). Field names are PascalCase or camelCase exactly as the
+app sends them; the server appears to bind case-insensitively but the
+app's spelling is the safe choice.
+
+### Optimistic locking with updateTime
+
+Every travel schedule carries `updateTime` (Unix seconds). Mutations
+send the value the client last saw as `TravelScheduleUpdateTime`
+(or `updateTime`); a stale value answers `004 Update time conflict`
+with `data.updateTime` set to the current value. The app's recipe:
+
+1. `GET TravelScheduleDetail/VerifyUpdateTime?TravelScheduleId=<id>&travelScheduleUpdateTime=0`
+   answers `001` or `004`; either way `data.updateTime` is current.
+2. Send the mutation with that value.
+3. Every mutation response returns the new time
+   (`data.travelScheduleUpdateTime` on `TravelScheduleDetail/Add`,
+   `data` itself on `Delete`, `data.updateTime` on `AddV2`); chain it
+   into the next call.
+4. On `004`, re-read `data.updateTime` and retry once.
+
+### Create a trip: `POST TravelSchedule/AddV2`
+
+`application/x-www-form-urlencoded`, extra header `language: zh-tw`.
+
+```
+CoverMediaId=            (empty or an id from TravelSchedule/GetSystemCoverList)
+Name=<text>
+StartDate=YYYY/MM/DD
+EndDate=YYYY/MM/DD       (at most 59 days after StartDate)
+TotalDay=<inclusive day count>
+ViewMode=DetailMode
+TravelScheduleUserLabelId=<label id>
+id=
+TrafficType=Custom       (also seen: Transit, Driving, Walk, PublicTransport, Flight)
+IsForceUpdateTsdRoute=0
+updateTime=0
+destinationList=         (empty array)
+LocationKey[]=7,7,0      (zero or more; axios encodes arrays as name[]=value)
+```
+
+Response `data`: `{id, name, updateTime, permission}`.
+
+The label id comes from `GET TravelScheduleUserLabel/Get` (member):
+the app picks the entry whose `name` is the zh-TW word for "unlabeled"
+and `isSystem` is true, falling back to the first entry.
+
+### Add a POI to a day
+
+1. `GET TravelScheduleDetail/GetAddWhere?poiId=<poi>&travelScheduleId=<trip>&travelScheduleUpdateTime=0`
+   returns `dayList[]`, one entry per day, each with `addWhereList[]`
+   of insertion slots: `{addWhereId, arrivalTsdName, arrivalTsdLat,
+   arrivalTsdLon, departureTsdName, departureTsdLat, departureTsdLon,
+   sort, isBestOfDay, isBestOfAll}`. The app preselects `isBestOfAll`,
+   then `isBestOfDay`, else the first slot; the last slot of a day
+   appends after the current last stop.
+2. `POST TravelScheduleDetail/Add` (`multipart/form-data` in the app):
+
+```
+TravelScheduleId=<trip>
+Day=<1-based day>
+PoiId=<poi>
+AddWhereId=<slot id>
+TravelScheduleUpdateTime=<current>
+TsdCoverMediaId=<poi.cover.id or empty>
+TsdName=<poi.name>
+```
+
+   Response `data.travelScheduleUpdateTime`.
+
+Related: `POST TravelScheduleDetail/AddByFavoritePoi` adds from a
+favorites playlist; `POST TravelScheduleDetail/Copy`
+(`{TravelScheduleId, Day, CopyTsdId, StayTime, ArrivalTrafficType,
+TravelScheduleUpdateTime}`) plus `Delete` is how the app moves a stop
+across days.
+
+### Remove a stop: `DELETE TravelScheduleDetail/Delete`
+
+Body (the app sends a form body on DELETE):
+`TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime`. Response
+`data` is the new update time.
+
+### Reorder a day: `PUT TravelScheduleDetail/Sort`
+
+`TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[]
+(the day's tsd ids in the new order), travelScheduleUpdateTime`.
+
+### Trip-level edits
+
+- `PUT TravelSchedule/UpdateV3`: AddV2's shape plus `id` and
+  `updateTime` (urlencoded, `language: zh-tw`).
+- `DELETE TravelSchedule/DeleteDay`: `id, DeleteDay, StartDate,
+  EndDate, TotalDay, UpdateTime`.
+- `DELETE TravelSchedule/Delete`: `id`. Deletes the whole trip.
+- `POST ExpertTour/TravelScheduleCopy`: `travelScheduleId` (an expert
+  tour id). Copies the tour into the member's own trips; the app only
+  checks for `001` and reloads the trip list.
+
+### Reading my trips
+
+- `GET TravelSchedule/GetMyAndCollaboration?updateTime=0&orderByColumn=updatetime&sort=desc`
+  lists own and shared trips: `{id, memberId, name, startDate, endDate,
+  totalDay, trafficType, createTime, updateTime, permission
+  (Owner|Editor|Viewer), viewMode, note, collaborationList[], coverUrl}`.
+- `GET TravelScheduleDetail/Get?travelScheduleId=&TravelScheduleUpdateTime=&isMyTravelSchedule=1`
+  returns `{travelScheduleInfo, dayList[{day, date, tsdList[]}]}` with
+  the same `tsd` rows as `ExpertTour/TourV2`.
+
+### Token refresh: `POST Token/Refresh`
+
+Form fields `refreshToken`, `memberId`. On `001`, `data` holds new
+`accessToken`, `refreshToken`, `memberId`; the app stores all three and
+replays the failed request with the new bearer.
