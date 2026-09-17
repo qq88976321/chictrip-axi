@@ -5,6 +5,7 @@
 //! definition, the output layer, the apiStatus mapping) are unit tested
 //! without spawning a process.
 
+pub mod api;
 pub mod auth;
 pub mod cli;
 pub mod datetime;
