@@ -1,0 +1,32 @@
+[package]
+name = "chictrip-axi"
+version = "0.1.0"
+edition = "2024"
+description = "Agent-first CLI for the chicTrip travel API (AXI)"
+license = "MIT"
+repository = "https://github.com/qq88976321/chictrip-axi"
+# MSRV floor: edition 2024 needs 1.85. The local toolchain is newer; the
+# CI msrv job stays commented until a 1.85 build is verified.
+rust-version = "1.85"
+
+[[bin]]
+name = "chictrip-axi"
+path = "src/main.rs"
+
+# Lint policy lives here, not in source attributes.
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+
+[profile.release]
+lto = true
+strip = true
