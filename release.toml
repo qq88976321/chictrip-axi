@@ -3,6 +3,9 @@
 publish = false
 push = false
 tag-name = "v{{version}}"
+# Sign tags with the repo's git signing config (SSH key via gpg.format),
+# the same one commit.gpgsign already uses for every commit.
+sign-tag = true
 allow-branch = ["master"]
 # release-hook runs the gate, then regenerates CHANGELOG.md via
 # git-cliff for the version being prepared (see justfile).
