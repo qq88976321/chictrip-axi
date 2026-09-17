@@ -19,6 +19,11 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "Show which token is in use and whether it works",
     ),
     ("auth clear", "Forget the stored member token"),
+    ("poi search <keyword>", "Find places and their ids"),
+    (
+        "poi view <poi-id>",
+        "Address and hours and rating and description of a place",
+    ),
 ];
 
 pub fn run(ctx: &Context) -> Result<Document, AxiError> {

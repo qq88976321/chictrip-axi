@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod home;
+pub mod poi;
 
 use crate::api::types::{Day, TripSummary};
 use crate::datetime::format_utc_date;

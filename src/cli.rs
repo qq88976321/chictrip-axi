@@ -48,6 +48,11 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+    /// Places: search by keyword, read one in detail
+    Poi {
+        #[command(subcommand)]
+        command: PoiCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -80,6 +85,34 @@ pub enum AuthCommand {
     #[command(after_help = "Examples:
   chictrip-axi auth clear")]
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PoiCommand {
+    /// Find places and their ids
+    #[command(after_help = "Examples:
+  chictrip-axi poi search \"Senso-ji\"
+  chictrip-axi poi search ramen --near 35.7111,139.7963
+  chictrip-axi poi search ramen --limit 5 --fields id,name,lat,lng")]
+    Search {
+        keyword: String,
+        /// Bias the search around LAT,LNG
+        #[arg(long, value_name = "LAT,LNG")]
+        near: Option<String>,
+        /// Rows to print (1-200)
+        #[arg(long, value_name = "N", default_value_t = 20)]
+        limit: usize,
+    },
+    /// Address, hours, rating, and description of a place
+    #[command(after_help = "Examples:
+  chictrip-axi poi view 8a48a94c-495f-44da-be0d-e1d7564f2b07
+  chictrip-axi poi view 8a48a94c-495f-44da-be0d-e1d7564f2b07 --full")]
+    View {
+        poi_id: String,
+        /// The whole description plus media and ticket tables
+        #[arg(long)]
+        full: bool,
+    },
 }
 
 /// What a command needs from the invocation: the global flags plus the
@@ -116,6 +149,7 @@ pub fn run(cli: Cli) -> Result<Document, AxiError> {
     let mut doc = match &cli.command {
         None => commands::home::run(&ctx)?,
         Some(Command::Auth { command }) => commands::auth::run(&ctx, command)?,
+        Some(Command::Poi { command }) => commands::poi::run(&ctx, command)?,
     };
     if let Some(fields) = &cli.global.fields {
         doc.apply_fields(fields)?;
@@ -190,5 +224,26 @@ mod tests {
     fn global_flags_parse_after_a_subcommand() {
         let cli = Cli::try_parse_from(["chictrip-axi", "auth", "status", "--json"]).unwrap();
         assert!(cli.global.json);
+    }
+
+    #[test]
+    fn poi_search_reports_its_own_flags_and_the_globals() {
+        let argv: Vec<String> = ["chictrip-axi", "poi", "search", "--bogus"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let flags = flags_for_argv(&argv);
+        assert_eq!(
+            flags,
+            [
+                "--fields",
+                "--help",
+                "--json",
+                "--limit",
+                "--near",
+                "--timeout",
+                "--token"
+            ]
+        );
     }
 }
