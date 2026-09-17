@@ -10,8 +10,8 @@ use crate::output::{Document, Table};
 
 const HOME_ROWS: usize = 5;
 
-/// The static half of the home view, and the single source a future
-/// `SKILL.md` generator reads.
+/// The static half of the home view, and the single source the
+/// `setup skill` generator reads.
 pub const COMMAND_INDEX: &[(&str, &str)] = &[
     ("auth set", "Store a member token copied from the browser"),
     (
@@ -49,6 +49,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
     (
         "location search <keyword>",
         "Destination keys for trip create",
+    ),
+    (
+        "setup skill",
+        "Write the agent skill file (--check verifies it)",
     ),
 ];
 

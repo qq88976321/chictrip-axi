@@ -165,6 +165,13 @@ impl Sandbox {
         self.dir.join("auth.json")
     }
 
+    /// A working directory for the commands that write relative paths.
+    fn project(&self) -> PathBuf {
+        let dir = self.dir.join("project");
+        std::fs::create_dir_all(&dir).expect("create project dir");
+        dir
+    }
+
     fn write_auth(&self, access_token: &str, refresh_token: &str) {
         std::fs::write(
             self.auth_file(),
@@ -187,6 +194,31 @@ fn command_index_header() -> String {
     format!(
         "commands[{}]{{command,summary}}:",
         chictrip_axi::commands::home::COMMAND_INDEX.len()
+    )
+}
+
+/// A run with a working directory of its own, for the commands that write
+/// files relative to it. Port 9 is the discard service and nothing listens
+/// there, so a command that unexpectedly calls out fails instead of
+/// reaching the real API.
+fn run_in(sandbox: &Sandbox, cwd: &Path, env: &[(&str, &str)], args: &[&str]) -> (String, i32) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_chictrip-axi"));
+    command
+        .args(args)
+        .current_dir(cwd)
+        .env("HOME", &sandbox.dir)
+        .env("CHICTRIP_AXI_AUTH_FILE", sandbox.auth_file())
+        .env("CHICTRIP_AXI_BASE_URL", "http://127.0.0.1:9/")
+        .env_remove("CHICTRIP_AXI_TOKEN")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("CLAUDE_CONFIG_DIR");
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command.output().expect("run chictrip-axi");
+    (
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        output.status.code().unwrap_or(-1),
     )
 }
 
@@ -686,6 +718,71 @@ fn trip_preview_rejects_a_day_outside_the_trip() {
     );
     assert_eq!(code, 0, "{stdout}");
     assert!(stdout.contains("\nstops[0]:\n"), "{stdout}");
+}
+
+#[test]
+fn setup_skill_writes_the_committed_path_and_is_idempotent() {
+    let sandbox = Sandbox::new("skill");
+    let project = sandbox.project();
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.starts_with("file: \"skills/chictrip-axi/SKILL.md\"\nstatus: written\n"),
+        "{stdout}"
+    );
+    let written = std::fs::read_to_string(project.join("skills/chictrip-axi/SKILL.md")).unwrap();
+    assert!(
+        written.starts_with("---\nname: chictrip-axi\n"),
+        "{written}"
+    );
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: unchanged\n"), "{stdout}");
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill", "--check"]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: current\n"), "{stdout}");
+
+    let (stdout, code) = run_in(
+        &sandbox,
+        &project,
+        &[],
+        &["setup", "skill", "--out", "custom/SKILL.md"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(project.join("custom/SKILL.md")).unwrap(),
+        written
+    );
+}
+
+#[test]
+fn setup_skill_check_fails_when_the_file_is_missing_or_edited() {
+    let sandbox = Sandbox::new("skill-check");
+    let project = sandbox.project();
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill", "--check"]);
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: not_found\n"), "{stdout}");
+    assert!(stdout.contains("skills/chictrip-axi/SKILL.md"), "{stdout}");
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill"]);
+    assert_eq!(code, 0, "{stdout}");
+
+    let path = project.join("skills/chictrip-axi/SKILL.md");
+    let edited = format!("{}hand edited\n", std::fs::read_to_string(&path).unwrap());
+    std::fs::write(&path, &edited).unwrap();
+
+    let (stdout, code) = run_in(&sandbox, &project, &[], &["setup", "skill", "--check"]);
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: conflict\n"), "{stdout}");
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        edited,
+        "--check never writes"
+    );
 }
 
 #[test]

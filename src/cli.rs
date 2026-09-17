@@ -6,6 +6,7 @@ use crate::commands;
 use crate::error::AxiError;
 use crate::output::Document;
 use clap::{Args, CommandFactory, Parser, Subcommand};
+use std::path::PathBuf;
 
 /// One sentence of what this AXI does; the home view and `--help` share it.
 pub const DESCRIPTION: &str = "Agent-first CLI for chicTrip: search places, read expert itineraries, build trips in your account";
@@ -67,6 +68,33 @@ pub enum Command {
     Location {
         #[command(subcommand)]
         command: LocationCommand,
+    },
+    /// Agent integrations: the installable skill file
+    Setup {
+        #[command(subcommand)]
+        command: SetupCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SetupCommand {
+    /// Write the agent skill file (--check verifies it instead)
+    #[command(after_help = "Examples:
+  chictrip-axi setup skill
+  chictrip-axi setup skill --check
+  chictrip-axi setup skill --out build/SKILL.md
+--check exits 1 with error conflict when the file differs from this build, which is how CI gates it.")]
+    Skill {
+        /// Verify the file instead of writing it
+        #[arg(long)]
+        check: bool,
+        /// Where to write the skill
+        #[arg(
+            long,
+            value_name = "PATH",
+            default_value = "skills/chictrip-axi/SKILL.md"
+        )]
+        out: PathBuf,
     },
 }
 
@@ -314,6 +342,7 @@ pub fn run(cli: Cli) -> Result<Document, AxiError> {
         Some(Command::Tour { command }) => commands::tour::run(&ctx, command)?,
         Some(Command::Poi { command }) => commands::poi::run(&ctx, command)?,
         Some(Command::Location { command }) => commands::location::run(&ctx, command)?,
+        Some(Command::Setup { command }) => commands::setup::run(command)?,
     };
     if let Some(fields) = &cli.global.fields {
         doc.apply_fields(fields)?;
@@ -388,6 +417,26 @@ mod tests {
     fn global_flags_parse_after_a_subcommand() {
         let cli = Cli::try_parse_from(["chictrip-axi", "auth", "status", "--json"]).unwrap();
         assert!(cli.global.json);
+    }
+
+    #[test]
+    fn setup_skill_reports_its_own_flags_and_the_globals() {
+        let argv: Vec<String> = ["chictrip-axi", "setup", "skill", "--bogus"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(
+            flags_for_argv(&argv),
+            [
+                "--check",
+                "--fields",
+                "--help",
+                "--json",
+                "--out",
+                "--timeout",
+                "--token"
+            ]
+        );
     }
 
     #[test]
