@@ -32,7 +32,7 @@ next: chictrip-axi --help
 
 ```
 chictrip-axi --help      # concise reference for this level
-chictrip-axi --version   # bare version, e.g. chictrip-axi 0.1.0
+chictrip-axi --version   # bare version, e.g. chictrip-axi 0.0.1
 ```
 
 `-V` is a synonym for `--version`. Both print the bare version and exit

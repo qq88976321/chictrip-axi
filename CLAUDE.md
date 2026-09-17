@@ -15,9 +15,10 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   the TOON output layer, `skills/chictrip-axi/SKILL.md`, and
   `setup hooks` are the next milestone.
 - Not yet published: no git remote wired. Development on branch
-  `master` (cargo-release `allow-branch = ["master"]`). First release
-  is cut with `just release 0.1.0` so the first tag is v0.1.0 (explicit
-  version, not a patch bump). Releases and the publish chain in
+  `master` (cargo-release `allow-branch = ["master"]`). The version
+  line starts at 0.0.1: v0.0.1 is the first tag, cut locally on
+  2026-09-17 and not pushed. Later releases are
+  `just release patch|minor|major`. Releases and the publish chain in
   docs/releasing.md are USER-ONLY.
 - Toolchain: `cargo`/rustc 1.97.1 locally. Rust edition 2024, MSRV =
   1.85 (the edition floor). The CI msrv job stays commented until a
@@ -54,7 +55,7 @@ just test-install # offline install.sh round trip against a fake
                   #   `rustup target add x86_64-unknown-linux-musl`.
 just run -- ARGS  # run the binary, e.g. `just run -- --help`
 just release LEVEL # cargo-release: gate, bump, regen CHANGELOG.md,
-                   #   commit, tag. USER-ONLY. First release: 0.1.0.
+                   #   commit, tag. USER-ONLY.
 just site-build / site-serve  # Zensical docs site (website/)
 ```
 

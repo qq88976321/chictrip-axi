@@ -46,7 +46,7 @@ USAGE:
     install.sh [OPTIONS]
 
 OPTIONS:
-    --version <tag>   Install this release instead of the latest (e.g. v0.1.0)
+    --version <tag>   Install this release instead of the latest (e.g. v0.0.1)
     --to <dir>        Install into <dir> instead of ${DEFAULT_INSTALL_DIR}
     -h, --help        Print this help
 
@@ -170,7 +170,7 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --version)
-                [ $# -ge 2 ] || die "--version requires a tag, e.g. --version v0.1.0"
+                [ $# -ge 2 ] || die "--version requires a tag, e.g. --version v0.0.1"
                 VERSION="$2"
                 shift 2
                 ;;

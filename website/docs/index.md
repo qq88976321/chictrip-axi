@@ -37,7 +37,7 @@ the platform list, and building from source.
 ```
 chictrip-axi             # home view: what this binary is and what to run next
 chictrip-axi --help      # concise reference
-chictrip-axi --version   # bare version, e.g. chictrip-axi 0.1.0
+chictrip-axi --version   # bare version, e.g. chictrip-axi 0.0.1
 ```
 
 See [Usage](usage.md) for the home view, the exit codes, and the error

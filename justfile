@@ -62,8 +62,9 @@ release-hook:
     just gate
     if [ "$DRY_RUN" != "true" ]; then git-cliff --tag "v${NEW_VERSION}" -o CHANGELOG.md; fi
 
-# First release: `just release 0.1.0` (explicit version -> tag v0.1.0,
-# no patch bump); afterwards `just release patch|minor|major`.
+# `just release patch|minor|major`, or an explicit `just release X.Y.Z`
+# (cargo-release refuses to go backwards). `just release release` tags
+# the current version without a bump, which is how v0.0.1 was cut.
 # Bump version and tag vX.Y.Z locally (no push).
 release level="patch":
     cargo release {{level}} --execute

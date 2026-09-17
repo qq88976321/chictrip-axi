@@ -38,13 +38,14 @@ The site lands at <https://qq88976321.github.io/chictrip-axi/>, matching
 ## Cutting a release
 
 ```
-just release 0.1.0              # first release: explicit version, not a bump
-                                # afterwards: just release patch|minor|major
+just release patch              # or minor | major, or an explicit X.Y.Z
 git push origin master --follow-tags
 ```
 
 `just release` runs `just gate` through the `pre-release-hook`, so a
-failing gate aborts before anything is tagged.
+failing gate aborts before anything is tagged. cargo-release refuses to
+go backwards; to tag a hand-set version without bumping it, use
+`just release release` (that is how v0.0.1 was cut).
 
 Pushing the `v*` tag runs `release.yml`, which:
 
@@ -57,7 +58,7 @@ Pushing the `v*` tag runs `release.yml`, which:
 Verify:
 
 ```
-gh release view v0.1.0          # expect 9 assets: 4 tarballs, 4 sidecars, install.sh
+gh release view v0.0.1          # expect 9 assets: 4 tarballs, 4 sidecars, install.sh
 curl -fsSL https://github.com/qq88976321/chictrip-axi/releases/latest/download/install.sh | sh
 chictrip-axi --version
 ```

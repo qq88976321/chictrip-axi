@@ -32,7 +32,7 @@ install.sh [--version <tag>] [--to <dir>]
 
 | Option | Environment | Effect |
 |--------|-------------|--------|
-| `--version <tag>` | `CHICTRIP_AXI_VERSION` | Install that release instead of the latest, e.g. `v0.1.0` |
+| `--version <tag>` | `CHICTRIP_AXI_VERSION` | Install that release instead of the latest, e.g. `v0.0.1` |
 | `--to <dir>` | `CHICTRIP_AXI_INSTALL_DIR` | Install into `<dir>` instead of `~/.local/bin` |
 
 Flags win over the environment. To pass a flag through the one-liner,

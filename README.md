@@ -46,7 +46,7 @@ Rather read the script first, install somewhere else, or pin a version:
 ```
 curl -fsSL https://github.com/qq88976321/chictrip-axi/releases/latest/download/install.sh -o install.sh
 less install.sh
-sh install.sh --to ~/bin --version v0.1.0
+sh install.sh --to ~/bin --version v0.0.1
 ```
 
 Uninstall by deleting the binary (`rm ~/.local/bin/chictrip-axi`).
@@ -64,7 +64,7 @@ Requires Rust 1.85+ (edition 2024).
 ```
 chictrip-axi             # home view: what this binary is and what to run next
 chictrip-axi --help      # concise reference
-chictrip-axi --version   # bare version, e.g. chictrip-axi 0.1.0
+chictrip-axi --version   # bare version, e.g. chictrip-axi 0.0.1
 ```
 
 A bare invocation prints live content rather than help text:
@@ -94,9 +94,9 @@ just test-install  # offline install.sh round trip (needs the musl target)
 just site-build    # docs site (Zensical via uvx)
 ```
 
-Releases are cut with `just release` (cargo-release + git-cliff); the
-first release is `just release 0.1.0`. Pushing the tag runs the release
-workflow; see [docs/releasing.md](docs/releasing.md).
+Releases are cut with `just release patch|minor|major` (cargo-release +
+git-cliff); pushing the tag runs the release workflow. See
+[docs/releasing.md](docs/releasing.md).
 
 The development contract, for agents and humans alike, is
 [CLAUDE.md](CLAUDE.md).
