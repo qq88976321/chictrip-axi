@@ -126,7 +126,12 @@ Out of scope: the same data is reachable through the regular endpoints.
   7 rows with `id`, `name` (zh-TW), `icon`
   (`enterTainment`, `food`, `hotel`, ...), `type`. `categoryType` on a
   POI is the `icon` value.
-- Travel schedule detail rows (`tsd`) have `tsdType` `poi` or `flight`.
+- Travel schedule detail rows (`tsd`) have `tsdType` `basic` for an
+  ordinary stop and `flight` for an airport leg (verified 2026-09-18 on
+  `ExpertTour/TourV2`, `TravelScheduleDetail/Get`, and the row
+  `TravelScheduleDetail/Add` returns). The category is a separate pair,
+  `categoryName` (zh-TW) and `categoryIcon` (`enterTainment`, `food`,
+  `moon`, `takeOff`, ...).
 - Timestamps are Unix seconds (`publishTime`, `updateTime`,
   `createTime`); dates are `YYYY/MM/DD` strings; times `HH:MM`.
 
@@ -262,28 +267,45 @@ with `data.updateTime` set to the current value. The app's recipe:
 ### Create a trip: `POST TravelSchedule/AddV2`
 
 `application/x-www-form-urlencoded`, extra header `language: zh-tw`.
+Verified live 2026-09-18 (trip created, then deleted):
 
 ```
-CoverMediaId=            (empty or an id from TravelSchedule/GetSystemCoverList)
+CoverMediaId=<id from TravelSchedule/GetSystemCoverList>   REQUIRED, must be real
 Name=<text>
 StartDate=YYYY/MM/DD
 EndDate=YYYY/MM/DD       (at most 59 days after StartDate)
 TotalDay=<inclusive day count>
 ViewMode=DetailMode
-TravelScheduleUserLabelId=<label id>
+TravelScheduleUserLabelId=<id from TravelScheduleUserLabel/Get>   REQUIRED, must be real
 id=
 TrafficType=Custom       (also seen: Transit, Driving, Walk, PublicTransport, Flight)
 IsForceUpdateTsdRoute=0
 updateTime=0
-destinationList=         (empty array)
-LocationKey[]=7,7,0      (zero or more; axios encodes arrays as name[]=value)
+LocationKey[]=7,7,0      (at least one; axios encodes arrays as name[]=value)
 ```
 
-Response `data`: `{id, name, updateTime, permission}`.
+Response `data`: the full trip summary (`id, memberId, coverMediaId,
+coverUrl, name, startDate, endDate, totalDay, trafficType, createTime,
+updateTime, collaborationList, permission, viewMode, note`).
 
-The label id comes from `GET TravelScheduleUserLabel/Get` (member):
-the app picks the entry whose `name` is the zh-TW word for "unlabeled"
-and `isSystem` is true, falling back to the first entry.
+Three fields are validated server side and each failure comes back as
+the generic `002 A non-empty request body is required` rather than a
+field name: an empty `CoverMediaId`, an empty `TravelScheduleUserLabelId`,
+and a missing `LocationKey[]`. The web app never hits them because its
+form preselects the first system cover, resolves the label, and refuses
+to submit without a destination; a client that sends `CoverMediaId=`
+(as the first cut of `chictrip-axi trip create` did) gets the same
+message for every encoding and header combination, which is what made
+the failure look like a transport problem. `destinationList` may be
+omitted; the app sends it only when it has resolved destination objects.
+
+`GET TravelSchedule/GetSystemCoverList` (member) returns
+`[{id, value}]` where `value` is the image URL; the app uses the first
+entry for a new trip. `GET TravelScheduleUserLabel/Get` (member) returns
+`[{id, name, isSystem, sort, travelScheduleCount}]` with four system
+labels (planning, travelling, done, unlabeled in zh-TW); the app picks
+the entry whose `name` is the zh-TW word for "unlabeled" and `isSystem`
+is true, falling back to the first entry.
 
 ### Add a POI to a day
 
@@ -306,7 +328,12 @@ TsdCoverMediaId=<poi.cover.id or empty>
 TsdName=<poi.name>
 ```
 
-   Response `data.travelScheduleUpdateTime`.
+   Response (verified live 2026-09-18): `data.tsdInfo` is the whole new
+   `tsd` row, including the `id` that `Delete` takes, and
+   `data.travelScheduleUpdateTime` is the trip's new update time.
+   `addWhereId` is the literal `start` before the day's first stop and
+   `end` after its last one; the slots in between carry the id of the
+   stop they follow. A day with no stops has both `start` and `end`.
 
 Related: `POST TravelScheduleDetail/AddByFavoritePoi` adds from a
 favorites playlist; `POST TravelScheduleDetail/Copy`
@@ -318,7 +345,8 @@ across days.
 
 Body (the app sends a form body on DELETE):
 `TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime`. Response
-`data` is the new update time.
+`data` is the new update time as a bare number (verified live
+2026-09-18).
 
 ### Reorder a day: `PUT TravelScheduleDetail/Sort`
 
@@ -332,6 +360,9 @@ Body (the app sends a form body on DELETE):
 - `DELETE TravelSchedule/DeleteDay`: `id, DeleteDay, StartDate,
   EndDate, TotalDay, UpdateTime`.
 - `DELETE TravelSchedule/Delete`: `id`. Deletes the whole trip.
+  Response `data` is `true`, and deleting a trip that is already gone
+  is also `001 true` rather than `011`, so the call is idempotent
+  (verified live 2026-09-18).
 - `POST ExpertTour/TravelScheduleCopy`: `travelScheduleId` (an expert
   tour id). Copies the tour into the member's own trips; the app only
   checks for `001` and reloads the trip list.
