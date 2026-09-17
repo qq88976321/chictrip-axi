@@ -29,12 +29,14 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   out-of-band (NOT Cargo deps): cargo-release, git-cliff (CHANGELOG.md,
   config in cliff.toml), Zensical (docs, via uvx), shellcheck
   (install.sh).
-- AXI design skill: the upstream guide installs with
-  `npx skills add kunchenguid/axi` (writes .claude/skills and
-  .agents/skills). USER-ONLY: the sandbox blocks writes there. Until it
-  is installed, https://axi.md/ and
-  https://github.com/kunchenguid/axi/blob/main/.agents/skills/axi/SKILL.md
-  are the reference.
+- AXI design skill: installed (2026-09-17) with
+  `npx skills add kunchenguid/axi`. The canonical copy is
+  `.agents/skills/axi/SKILL.md`, `.claude/skills/axi` symlinks to it,
+  and `skills-lock.json` pins the upstream revision. Load the `axi`
+  skill before building, changing, or reviewing any command. Never
+  hand-edit SKILL.md: refresh it with the same command (USER-ONLY, the
+  sandbox blocks writes under .claude/skills) and commit all three
+  paths together. https://axi.md/ is the human-readable reference.
 
 ## Commands
 
