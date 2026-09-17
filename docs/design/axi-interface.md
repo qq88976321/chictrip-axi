@@ -1,6 +1,8 @@
 # AXI interface design: plan a trip, write it into chicTrip (milestone 2)
 
-Status: APPROVED by the user on 2026-09-18 (decisions D1-D4 below).
+Status: APPROVED by the user on 2026-09-18 (decisions D1-D4 below);
+implemented and verified live the same day, see "Live-run corrections"
+at the end for where the implementation departs from this text.
 Source facts: [../api/protocol.md](../api/protocol.md) and
 [../api/endpoints.md](../api/endpoints.md). Design rules: the `axi`
 skill (https://axi.md/) and the repo CLAUDE.md. Sample values are
@@ -20,10 +22,11 @@ commands is the agent's job; the CLI makes the surface discoverable
 ## Scope
 
 In: `auth set/status/clear`, `trip list/create/view/add/remove/delete`,
-`tour list/view/copy`, `poi search/view`, the home view, and the shared
+`tour list/view/copy`, `poi search/view`, `location search` (added
+during implementation: `trip create` cannot work without a destination
+key, see the corrections), the home view, and the shared
 HTTP/output/error/auth layers. Out (later milestones): rankings,
-nearby, comments, locations, categories (designed in git history at
-`2834aac`), stop reordering and notes, `trip preview <id>` for shared trips,
+nearby, comments, categories (designed in git history at `2834aac`), stop reordering and notes, `trip preview <id>` for shared trips,
 `skills/chictrip-axi/SKILL.md` generation with its `--check` gate,
 `setup hooks`.
 
@@ -35,7 +38,7 @@ chictrip-axi auth set (--access-token T --refresh-token R --member-id M | --from
 chictrip-axi auth status
 chictrip-axi auth clear
 chictrip-axi trip list [--limit N]
-chictrip-axi trip create --name NAME --start DATE --end DATE [--traffic MODE] [--location KEY]... [--duplicate]
+chictrip-axi trip create --name NAME --start DATE --end DATE --location KEY... [--traffic MODE] [--duplicate]
 chictrip-axi trip view <trip-id> [--day N]
 chictrip-axi trip add <trip-id> --day N --poi POI-ID... [--position last|best] [--allow-duplicate]
 chictrip-axi trip remove <trip-id> --stop TSD-ID...
@@ -45,6 +48,7 @@ chictrip-axi tour view <tour-id> [--day N] [--full]
 chictrip-axi tour copy <tour-id>
 chictrip-axi poi search <keyword> [--near LAT,LNG] [--limit N]
 chictrip-axi poi view <poi-id> [--full]
+chictrip-axi location search <keyword> [--limit N]
 ```
 
 Global flags, accepted by every command and never reported as unknown:
@@ -156,7 +160,7 @@ auth: member
 trips[3]{id,name,start,end,days}:
   fd4db85c-...,Tokyo temples,2026/10/01,2026/10/03,3
   ...
-commands[14]{command,summary}:
+commands[15]{command,summary}:
   auth set,Store a member token copied from the browser
   auth status,Show which token is in use and whether it works
   auth clear,Forget the stored member token
@@ -171,6 +175,7 @@ commands[14]{command,summary}:
   tour copy <tour-id>,Copy an expert itinerary into my trips
   poi search <keyword>,Find places and their ids
   poi view <poi-id>,Address, hours, rating, description of a place
+  location search <keyword>,Destination keys for trip create
 help[2]:
   Run `chictrip-axi trip view <id>` to continue a trip above
   Run `chictrip-axi <command> --help` for flags, defaults, and examples
@@ -243,9 +248,11 @@ and exit 0; (3) `POST TravelSchedule/AddV2` (urlencoded, header
 `language: zh-tw`) with the payload in protocol.md: `TotalDay` is the
 inclusive day count, `TrafficType` from `--traffic` (default `Custom`;
 accepted: `Custom`, `Transit`, `Driving`, `Walk`, `PublicTransport`),
-`LocationKey[]` from each `--location` (e.g. `7,7,0`), `CoverMediaId`
-empty. Validation before any call: dates parse, end >= start, span
-<= 60 days, name non-empty.
+`LocationKey[]` from each `--location` (e.g. `7,7,0`; at least one is
+required, chicTrip rejects a trip without a destination), `CoverMediaId`
+the first entry of `GET TravelSchedule/GetSystemCoverList` (chicTrip
+rejects an empty one). Validation before any call: dates parse, end >=
+start, span <= 60 days, name non-empty, at least one `--location`.
 
 ```
 trip:
@@ -423,6 +430,23 @@ help[2]:
 Empty: `count: 0`, `pois[0]:`, a hint to shorten the keyword or add
 `--near`.
 
+### location search
+
+`ExpertTour/SearchLocation?keyword=`, guest token is enough. Default
+`--limit 20`. `key` is the `country,city,area` string `trip create`
+takes verbatim.
+
+```
+count: 2
+locations[2]{name,full_name,key}:
+  Tokyo,Japan/Tokyo,"7,7,0"
+  Shinjuku,Japan/Tokyo/Shinjuku,"7,7,6"
+help[1]:
+  Run `chictrip-axi trip create --name "<name>" --start <date> --end <date> --location <key>` to file a trip there
+```
+
+Empty: `count: 0`, `locations[0]:`, a hint to try a shorter name.
+
 ### poi view
 
 `Poi/GetPoiById?id=`. No `help` unless truncated.
@@ -500,7 +524,8 @@ the user's HOME.
   hand-rolled encoder.
 - D2 auth: embedded guest token for reads; member token in the auth
   file with automatic refresh (section "Authentication").
-- D3 scope: the write vertical slice above (14 commands + home view).
+- D3 scope: the write vertical slice above (14 commands + home view;
+  `location search` was added during implementation, see below).
 - D4 live verification: the user places their tokens in
   `~/.config/chictrip-axi/auth.json`; the implementing agent may create
   a clearly named test trip in that account, exercise add/remove/view,
@@ -537,3 +562,39 @@ the user's HOME.
   each commit, conventional commits with scopes `build` (Cargo.toml),
   `feat(api)`, `feat(auth)`, `feat(output)`, `feat(trip)`, `feat(tour)`,
   `feat(poi)`, `feat(cli)`, `test`, `docs`; never push.
+
+## Live-run corrections (2026-09-18)
+
+What the implementation and the live run against api.chictrip.com.tw
+changed relative to the text above. protocol.md carries the API-side
+evidence.
+
+- `trip create` needs three real values or chicTrip answers the generic
+  `002 A non-empty request body is required`: a `CoverMediaId` from
+  `TravelSchedule/GetSystemCoverList` (the app preselects the first),
+  the label id, and at least one `LocationKey[]`. Hence `--location` is
+  required and `location search` (ExpertTour/SearchLocation) joined the
+  milestone so an agent can obtain a key. `destinationList` is not sent.
+- `tsdType` values are `basic` and `flight`, not `poi`; `type` shows
+  them verbatim.
+- `count` prints `N of M` only when `--limit` trimmed rows; a bare
+  number otherwise (the general rule wins over the `12 of 12` example).
+- `help` is a TOON inline primitive array (`help[2]: a,b`), not one
+  line per entry as the examples above draw it; help sentences avoid
+  commas so they need no quotes. The encoder quotes any value holding
+  `:` `-` `[` `]` `{` `}`, so UUIDs, `HH:MM` times, and most `help`
+  lines print quoted; the output is valid TOON and decodes back.
+- `--fields` targets the table or object each command names as primary
+  (`poi:` for `poi view`, `stops` for `trip view` and `tour view`, the
+  list table otherwise), not "the first table".
+- `trip add` re-reads the trip once after the last write to report the
+  new stops' `tsd_id` and `seq`: the `Add` response carries
+  `data.tsdInfo.id` but no position.
+- `trip delete` on a trip that is already gone prints no `note`:
+  chicTrip answers `001 true` for an unknown id, so the CLI cannot tell.
+  Exit 0 either way.
+- The home view prints `error` and `message` lines when its live call
+  fails, above the command index, so the agent sees why.
+- `src/datetime.rs` (UTC calendar maths) exists instead of a date
+  crate; the shared table builders live in `commands/mod.rs` so the
+  noun modules do not depend on each other.
