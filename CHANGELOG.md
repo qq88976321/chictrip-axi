@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
-## [Unreleased]
+## [0.0.1] - 2026-09-17
 
 ### Features
 
@@ -15,6 +15,7 @@ Conventional Commits.
 - Add the repo constitution (CLAUDE.md)
 - Add README and the release runbook
 - **site**: Add the Zensical docs site
+- Record the published GitHub remote
 
 ### Testing
 
