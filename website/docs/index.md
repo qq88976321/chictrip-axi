@@ -50,7 +50,7 @@ contract.
 
 !!! note "Personal tool, built with heavy AI assistance (Claude Code)"
 
-    Fourteen commands over the chicTrip API: search places, read expert
+    Fifteen commands over the chicTrip API: search places, read expert
     itineraries, and build trips in your own account. It comes with no
     warranty and no support commitment: issues and PRs are welcome and
     may still go unanswered.

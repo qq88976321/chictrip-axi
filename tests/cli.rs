@@ -24,6 +24,7 @@ const TRIP_DETAIL_AFTER_ADD: &str = include_str!("fixtures/trip_detail_after_add
 const USER_LABELS: &str = include_str!("fixtures/user_labels.json");
 const ADD_WHERE: &str = include_str!("fixtures/add_where.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
+const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
 #[derive(Debug, Clone)]
 struct Request {
@@ -563,6 +564,31 @@ fn trip_create_without_a_location_is_a_usage_error_before_any_request() {
 }
 
 #[test]
+fn location_search_lists_the_destination_keys_trip_create_needs() {
+    let server = Server::start(|_, _| ok(LOCATION_SEARCH));
+    let sandbox = Sandbox::new("location");
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["location", "search", "Tokyo"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.starts_with(concat!(
+            "count: 2\n",
+            "locations[2]{name,full_name,key}:\n",
+            "  Tokyo,Japan/Tokyo,\"7,7,0\"\n",
+            "  Shinjuku,Japan/Tokyo/Shinjuku,\"7,7,6\"\n",
+        )),
+        "{stdout}"
+    );
+    assert!(stdout.contains("--location <key>"));
+    let request = &server.requests()[0];
+    assert_eq!(request.path, "/ExpertTour/SearchLocation");
+    assert!(request.query.contains("keyword=Tokyo"));
+}
+
+#[test]
 fn an_unknown_path_is_reported_as_not_found() {
     let server = Server::start(|_, _| (404, "Not Found".to_string()));
     let sandbox = Sandbox::new("404");
@@ -579,7 +605,7 @@ fn the_home_view_shows_live_tours_and_the_command_index_for_a_guest() {
     assert_eq!(code, 0, "{stdout}");
     assert!(stdout.contains("auth: guest\n"));
     assert!(stdout.contains("tours[2]{id,name,destination,expert,likes}:"));
-    assert!(stdout.contains("commands[14]{command,summary}:"));
+    assert!(stdout.contains("commands[15]{command,summary}:"));
 }
 
 #[test]
@@ -591,7 +617,7 @@ fn a_failing_home_view_still_prints_the_command_index_and_exits_1() {
     assert_eq!(code, 1, "{stdout}");
     assert!(stdout.contains("error: api_error\n"));
     assert!(stdout.contains("under maintenance"));
-    assert!(stdout.contains("commands[14]{command,summary}:"));
+    assert!(stdout.contains("commands[15]{command,summary}:"));
 }
 
 #[test]

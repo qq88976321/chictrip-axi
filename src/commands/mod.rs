@@ -6,6 +6,7 @@
 
 pub mod auth;
 pub mod home;
+pub mod location;
 pub mod poi;
 pub mod tour;
 pub mod trip;

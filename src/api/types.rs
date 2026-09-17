@@ -217,6 +217,14 @@ pub struct TripDetail {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
+pub struct LocationHit {
+    pub name: Option<String>,
+    pub full_name: Option<String>,
+    pub location_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct SystemCover {
     pub id: Option<String>,
 }

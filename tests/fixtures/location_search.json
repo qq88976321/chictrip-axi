@@ -1,0 +1,17 @@
+{
+ "apiStatus": "001",
+ "data": [
+  {
+   "name": "Tokyo",
+   "fullName": "Japan/Tokyo",
+   "locationKey": "7,7,0"
+  },
+  {
+   "name": "Shinjuku",
+   "fullName": "Japan/Tokyo/Shinjuku",
+   "locationKey": "7,7,6"
+  }
+ ],
+ "message": null,
+ "requestId": "req-1"
+}

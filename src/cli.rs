@@ -63,6 +63,25 @@ pub enum Command {
         #[command(subcommand)]
         command: PoiCommand,
     },
+    /// Destinations: the country,city,area keys that trip create files a trip under
+    Location {
+        #[command(subcommand)]
+        command: LocationCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum LocationCommand {
+    /// Find destination keys (country,city,area) by place name
+    #[command(after_help = "Examples:
+  chictrip-axi location search Tokyo
+  chictrip-axi location search Kamakura --limit 5")]
+    Search {
+        keyword: String,
+        /// Rows to print (1-200)
+        #[arg(long, value_name = "N", default_value_t = 20)]
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -126,7 +145,7 @@ Re-running with the same name and dates returns the existing trip; --duplicate f
         /// Custom, Transit, Driving, Walk, or PublicTransport
         #[arg(long, value_name = "MODE", default_value = "Custom")]
         traffic: String,
-        /// Destination key like 7,7,0 (country,city,area); at least one, repeatable
+        /// Destination key like 7,7,0 (country,city,area) from `location search`; at least one, repeatable
         #[arg(long, value_name = "KEY", required = true)]
         location: Vec<String>,
         /// Create another trip even if one with the same name and dates exists
@@ -281,6 +300,7 @@ pub fn run(cli: Cli) -> Result<Document, AxiError> {
         Some(Command::Trip { command }) => commands::trip::run(&ctx, command)?,
         Some(Command::Tour { command }) => commands::tour::run(&ctx, command)?,
         Some(Command::Poi { command }) => commands::poi::run(&ctx, command)?,
+        Some(Command::Location { command }) => commands::location::run(&ctx, command)?,
     };
     if let Some(fields) = &cli.global.fields {
         doc.apply_fields(fields)?;

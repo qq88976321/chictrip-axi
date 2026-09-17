@@ -9,9 +9,10 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
 
 ## Quick facts
 
-- Milestone: the write vertical slice (2026-09-18). Fourteen commands
+- Milestone: the write vertical slice (2026-09-18). Fifteen commands
   (`auth set/status/clear`, `trip list/create/view/add/remove/delete`,
-  `tour list/view/copy`, `poi search/view`) plus the home view, over
+  `tour list/view/copy`, `poi search/view`, `location search`) plus the
+  home view, over
   the shared HTTP/output/error/auth layers. Designed in
   `docs/design/axi-interface.md`, which also lists what was left out.
   Verified live the same day against api.chictrip.com.tw with a member
@@ -100,7 +101,7 @@ just site-build / site-serve  # Zensical docs site (website/)
 - api/trips.rs the multi-call recipes and the updateTime chain
 - commands/    mod.rs holds what more than one noun needs (validation,
                value conversions, the trip and stop tables); auth.rs,
-               home.rs, poi.rs, tour.rs, trip.rs are one noun each and
+               home.rs, location.rs, poi.rs, tour.rs, trip.rs are one noun each and
                return a Document, never formatting or error text
 - tests/cli.rs the binary against a `TcpListener` fixture server, with
                trimmed captures under tests/fixtures/

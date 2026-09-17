@@ -10,7 +10,7 @@ Docs site: <https://qq88976321.github.io/chictrip-axi/>.
 
 ## Status
 
-Fourteen commands over the chicTrip API: search places, read expert
+Fifteen commands over the chicTrip API: search places, read expert
 itineraries, and build trips in your own account. Reads work with no
 setup at all; the trip commands need a token you copy out of the
 browser once. Every command was exercised against the live API on
@@ -116,7 +116,8 @@ forgets them.
 
 ```
 chictrip-axi trip list
-chictrip-axi trip create --name "Kamakura weekend" --start 2026-11-07 --end 2026-11-08 --location 7,8,44
+chictrip-axi location search Kyoto                     # the --location key trip create needs
+chictrip-axi trip create --name "Kyoto weekend" --start 2026-11-07 --end 2026-11-08 --location 7,9,45
 chictrip-axi tour copy <tour-id>                       # or start from an expert itinerary
 chictrip-axi trip view <trip-id>                       # stops day by day, with the tsd_id
 chictrip-axi poi search "Kamakura" --limit 5           # find ids to add

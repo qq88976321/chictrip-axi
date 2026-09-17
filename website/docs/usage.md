@@ -4,7 +4,7 @@
 chictrip-axi [COMMAND] [OPTIONS]
 ```
 
-Fourteen commands over the chicTrip API. Reads work with no setup; the
+Fifteen commands over the chicTrip API. Reads work with no setup; the
 trip commands need a member token copied out of the browser. Sample
 values below are romanized, the live API answers in zh-TW.
 
@@ -50,6 +50,7 @@ still needs to know what this tool does.
 | `poi view <poi-id> [--full]` | Address, hours, rating, description, media and ticket counts |
 | `tour list [--curated] [--page N] [--limit N]` | Popular expert itineraries, or the editor picks |
 | `tour view <tour-id> [--day N] [--full]` | An expert itinerary day by day |
+| `location search <keyword> [--limit N]` | Destination keys (country,city,area) for `trip create` |
 
 ### Your account
 
@@ -100,7 +101,8 @@ with the demo account's data instead.
 ## Plan a trip and write it
 
 ```
-chictrip-axi trip create --name "Kamakura weekend" --start 2026-11-07 --end 2026-11-08 --location 7,8,44
+chictrip-axi location search Kyoto
+chictrip-axi trip create --name "Kyoto weekend" --start 2026-11-07 --end 2026-11-08 --location 7,9,45
 chictrip-axi tour list --limit 5
 chictrip-axi tour view <tour-id> --day 1
 chictrip-axi tour copy <tour-id>                        # or start from an expert itinerary

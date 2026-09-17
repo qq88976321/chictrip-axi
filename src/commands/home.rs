@@ -42,6 +42,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "poi view <poi-id>",
         "Address and hours and rating and description of a place",
     ),
+    (
+        "location search <keyword>",
+        "Destination keys for trip create",
+    ),
 ];
 
 pub fn run(ctx: &Context) -> Result<Document, AxiError> {
