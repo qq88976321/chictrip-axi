@@ -19,6 +19,15 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "Show which token is in use and whether it works",
     ),
     ("auth clear", "Forget the stored member token"),
+    (
+        "tour list",
+        "Popular expert itineraries (--curated for editor picks)",
+    ),
+    ("tour view <tour-id>", "An expert itinerary day by day"),
+    (
+        "tour copy <tour-id>",
+        "Copy an expert itinerary into my trips",
+    ),
     ("poi search <keyword>", "Find places and their ids"),
     (
         "poi view <poi-id>",

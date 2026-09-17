@@ -48,6 +48,11 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+    /// Expert itineraries published on chicTrip
+    Tour {
+        #[command(subcommand)]
+        command: TourCommand,
+    },
     /// Places: search by keyword, read one in detail
     Poi {
         #[command(subcommand)]
@@ -85,6 +90,44 @@ pub enum AuthCommand {
     #[command(after_help = "Examples:
   chictrip-axi auth clear")]
     Clear,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TourCommand {
+    /// Popular expert itineraries
+    #[command(after_help = "Examples:
+  chictrip-axi tour list
+  chictrip-axi tour list --limit 5
+  chictrip-axi tour list --curated")]
+    List {
+        /// Editor picks instead of the popularity ranking (no paging)
+        #[arg(long)]
+        curated: bool,
+        /// Page of the ranking, 1-based
+        #[arg(long, value_name = "N", default_value_t = 1)]
+        page: usize,
+        /// Rows to print (1-200)
+        #[arg(long, value_name = "N", default_value_t = 20)]
+        limit: usize,
+    },
+    /// An expert itinerary day by day
+    #[command(after_help = "Examples:
+  chictrip-axi tour view 8c9b156f-7990-4d14-951e-a5e4ce3bc575
+  chictrip-axi tour view 8c9b156f-7990-4d14-951e-a5e4ce3bc575 --day 1
+  chictrip-axi tour view 8c9b156f-7990-4d14-951e-a5e4ce3bc575 --full")]
+    View {
+        tour_id: String,
+        #[arg(long, value_name = "N")]
+        day: Option<i64>,
+        /// Notes, traffic, highlights, and the whole introduction
+        #[arg(long)]
+        full: bool,
+    },
+    /// Copy an expert itinerary into my trips
+    #[command(after_help = "Examples:
+  chictrip-axi tour copy 8c9b156f-7990-4d14-951e-a5e4ce3bc575
+chicTrip allows several copies of the same tour, so this is not idempotent.")]
+    Copy { tour_id: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -149,6 +192,7 @@ pub fn run(cli: Cli) -> Result<Document, AxiError> {
     let mut doc = match &cli.command {
         None => commands::home::run(&ctx)?,
         Some(Command::Auth { command }) => commands::auth::run(&ctx, command)?,
+        Some(Command::Tour { command }) => commands::tour::run(&ctx, command)?,
         Some(Command::Poi { command }) => commands::poi::run(&ctx, command)?,
     };
     if let Some(fields) = &cli.global.fields {
