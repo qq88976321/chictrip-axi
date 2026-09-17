@@ -182,6 +182,14 @@ impl Drop for Sandbox {
     }
 }
 
+/// Derived from the index itself so adding a command does not churn tests.
+fn command_index_header() -> String {
+    format!(
+        "commands[{}]{{command,summary}}:",
+        chictrip_axi::commands::home::COMMAND_INDEX.len()
+    )
+}
+
 fn run(server: &Server, auth_file: &Path, args: &[&str]) -> (String, i32) {
     let output = Command::new(env!("CARGO_BIN_EXE_chictrip-axi"))
         .args(args)
@@ -589,6 +597,98 @@ fn location_search_lists_the_destination_keys_trip_create_needs() {
 }
 
 #[test]
+fn trip_preview_reads_a_shared_trip_as_a_guest() {
+    let server = Server::start(|_, _| ok(TRIP_DETAIL));
+    let sandbox = Sandbox::new("preview");
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "preview", "3c1d0a2e-1111-4111-8111-111111111111"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert_eq!(
+        stdout,
+        concat!(
+            "trip:\n",
+            "  id: \"3c1d0a2e-1111-4111-8111-111111111111\"\n",
+            "  name: Tokyo temples\n",
+            "  start: 2026/10/01\n",
+            "  end: 2026/10/03\n",
+            "  days: 3\n",
+            "stops[1]{day,seq,arrive,stay_min,name,type,city,poi_id}:\n",
+            "  1,1,\"09:00\",60,Azumabashi pier,basic,Tokyo,\"edd5509c-d852-41d1-9d27-0139d6d9f8f5\"\n",
+            "help[2]: \"Run `chictrip-axi poi view <poi_id>` for a stop\",\"Run `chictrip-axi trip add <my-trip-id> --day <n> --poi <poi_id>` to copy a stop into my own trip\"\n"
+        )
+    );
+    assert_eq!(server.requests().len(), 1, "preview is a single call");
+    let request = &server.requests()[0];
+    assert_eq!(request.method, "GET");
+    assert_eq!(request.path, "/TravelScheduleDetail/Preview");
+    assert!(
+        request
+            .query
+            .contains("TravelScheduleId=3c1d0a2e-1111-4111-8111-111111111111"),
+        "{}",
+        request.query
+    );
+}
+
+#[test]
+fn trip_preview_of_a_deleted_trip_is_not_found() {
+    let server =
+        Server::start(|_, _| envelope("011", "null", "\"TravelSchedule has been deleted\""));
+    let sandbox = Sandbox::new("preview-deleted");
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "preview", "00000000-0000-4000-8000-000000000000"],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(
+        stdout.starts_with("error: not_found\nmessage: TravelSchedule has been deleted\n"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn trip_preview_rejects_a_day_outside_the_trip() {
+    let server = Server::start(|_, _| ok(TRIP_DETAIL));
+    let sandbox = Sandbox::new("preview-day");
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "preview",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "4",
+        ],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: not_found\n"), "{stdout}");
+    assert!(
+        stdout.contains("day 4 is outside this itinerary"),
+        "{stdout}"
+    );
+    assert_eq!(server.requests().len(), 1, "preview is a single call");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "preview",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "2",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("\nstops[0]:\n"), "{stdout}");
+}
+
+#[test]
 fn an_unknown_path_is_reported_as_not_found() {
     let server = Server::start(|_, _| (404, "Not Found".to_string()));
     let sandbox = Sandbox::new("404");
@@ -605,7 +705,7 @@ fn the_home_view_shows_live_tours_and_the_command_index_for_a_guest() {
     assert_eq!(code, 0, "{stdout}");
     assert!(stdout.contains("auth: guest\n"));
     assert!(stdout.contains("tours[2]{id,name,destination,expert,likes}:"));
-    assert!(stdout.contains("commands[15]{command,summary}:"));
+    assert!(stdout.contains(&command_index_header()));
 }
 
 #[test]
@@ -617,7 +717,7 @@ fn a_failing_home_view_still_prints_the_command_index_and_exits_1() {
     assert_eq!(code, 1, "{stdout}");
     assert!(stdout.contains("error: api_error\n"));
     assert!(stdout.contains("under maintenance"));
-    assert!(stdout.contains("commands[15]{command,summary}:"));
+    assert!(stdout.contains(&command_index_header()));
 }
 
 #[test]

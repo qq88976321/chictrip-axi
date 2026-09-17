@@ -48,7 +48,7 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
-    /// My trips: list, create, inspect, fill, and delete
+    /// My trips: list, create, inspect, fill, and delete; preview any trip by id
     Trip {
         #[command(subcommand)]
         command: TripCommand,
@@ -157,6 +157,19 @@ Re-running with the same name and dates returns the existing trip; --duplicate f
   chictrip-axi trip view 3c1d0a2e-0000-0000-0000-000000000000
   chictrip-axi trip view 3c1d0a2e-0000-0000-0000-000000000000 --day 1")]
     View {
+        trip_id: String,
+        /// Keep only this day
+        #[arg(long, value_name = "N")]
+        day: Option<i64>,
+    },
+    /// Stops of any trip by id, readable without signing in
+    #[command(after_help = "Examples:
+  chictrip-axi trip preview <trip-id>
+  chictrip-axi trip preview <trip-id> --day 1
+The id is the preViewTravelId of a chicTrip share link
+https://www.chictrip.com.tw/?action=preView&preViewTravelId=<trip-id>
+chicTrip answers for any trip id, shared or not.")]
+    Preview {
         trip_id: String,
         /// Keep only this day
         #[arg(long, value_name = "N")]

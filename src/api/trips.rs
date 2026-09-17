@@ -63,6 +63,20 @@ pub fn trip_detail(
     decode(data)
 }
 
+/// Trip preview: chicTrip answers for any trip id with the guest token,
+/// shared or not. The parameter is `TravelScheduleId` (capital T); `Get`
+/// spells it `travelScheduleId`.
+pub fn trip_preview(client: &Client, trip_id: &str) -> Result<TripDetail, AxiError> {
+    let data = client.get(
+        "TravelScheduleDetail/Preview",
+        &[("TravelScheduleId", trip_id.to_string())],
+    )?;
+    if data.is_null() {
+        return Err(AxiError::not_found(format!("no trip with id {trip_id}")));
+    }
+    decode(data)
+}
+
 pub fn default_label_id(client: &Client) -> Result<String, AxiError> {
     let data = client.get("TravelScheduleUserLabel/Get", &[])?;
     let labels: Vec<UserLabel> = decode(data)?;

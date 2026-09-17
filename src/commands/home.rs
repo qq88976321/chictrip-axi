@@ -23,6 +23,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
     ("trip create --name --start --end", "Create an empty trip"),
     ("trip view <trip-id>", "Stops of a trip day by day"),
     (
+        "trip preview <trip-id>",
+        "Stops of any trip by id (no login needed)",
+    ),
+    (
         "trip add <trip-id> --day N --poi ID...",
         "Append POIs to a day (skips duplicates)",
     ),

@@ -24,6 +24,7 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             duplicate,
         } => create(ctx, name, start, end, traffic, location, *duplicate),
         TripCommand::View { trip_id, day } => view(ctx, trip_id, *day),
+        TripCommand::Preview { trip_id, day } => preview(ctx, trip_id, *day),
         TripCommand::Add {
             trip_id,
             day,
@@ -197,14 +198,19 @@ fn view(ctx: &Context, trip_id: &str, day: Option<i64>) -> Result<Document, AxiE
     Ok(doc)
 }
 
-fn trip_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiError> {
-    let info = &detail.travel_schedule_info;
+fn trip_header(info: &crate::api::types::TripInfo) -> Document {
     let mut header = Document::new();
     header.set("id", value(&info.id));
     header.set("name", value(&info.name));
     header.set("start", value(&info.start_date));
     header.set("end", value(&info.end_date));
     header.set("days", count(info.total_day));
+    header
+}
+
+fn trip_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiError> {
+    let info = &detail.travel_schedule_info;
+    let mut header = trip_header(info);
     header.set("permission", value(&info.permission));
     header.set("update_time", count(info.update_time));
 
@@ -212,6 +218,33 @@ fn trip_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiE
     let mut doc = Document::new();
     doc.set_object("trip", header);
     doc.set_table("stops", stops_table(&days, false, true));
+    doc.set_primary("stops");
+    Ok(doc)
+}
+
+fn preview(ctx: &Context, trip_id: &str, day: Option<i64>) -> Result<Document, AxiError> {
+    let client = ctx.client()?;
+    let detail = trips::trip_preview(&client, trip_id)?;
+    let mut doc = preview_document(&detail, day)?;
+    doc.set_strings(
+        "help",
+        &[
+            "Run `chictrip-axi poi view <poi_id>` for a stop",
+            "Run `chictrip-axi trip add <my-trip-id> --day <n> --poi <poi_id>` to copy a stop into my own trip",
+        ],
+    );
+    Ok(doc)
+}
+
+/// A viewer cannot write a trip that is not theirs, so the owner's
+/// `permission` and `update_time` and the per-stop `tsd_id` that only
+/// `trip remove` takes would all be noise here.
+fn preview_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiError> {
+    let info = &detail.travel_schedule_info;
+    let days = select_days(&detail.day_list, day, info.total_day)?;
+    let mut doc = Document::new();
+    doc.set_object("trip", trip_header(info));
+    doc.set_table("stops", stops_table(&days, false, false));
     doc.set_primary("stops");
     Ok(doc)
 }
@@ -451,5 +484,38 @@ mod tests {
         };
         let doc = trip_document(&detail, None).unwrap();
         assert!(crate::output::render(&doc, false).contains("stops[0]:"));
+    }
+
+    #[test]
+    fn a_preview_hides_the_owner_fields_and_the_tsd_id() {
+        use crate::api::types::Tsd;
+
+        let detail = TripDetail {
+            travel_schedule_info: TripInfo {
+                id: Some("t1".into()),
+                name: Some("Shared".into()),
+                total_day: Some(1),
+                permission: Some("Owner".into()),
+                update_time: Some(1_789_710_463),
+                ..TripInfo::default()
+            },
+            day_list: vec![Day {
+                day: Some(1),
+                date: Some("2026/10/01".into()),
+                tsd_list: vec![Tsd {
+                    id: Some("tsd-1".into()),
+                    name: Some("Kaminarimon".into()),
+                    ..Tsd::default()
+                }],
+            }],
+        };
+        let rendered = crate::output::render(&preview_document(&detail, None).unwrap(), false);
+        assert!(!rendered.contains("permission"), "{rendered}");
+        assert!(!rendered.contains("update_time"), "{rendered}");
+        assert!(!rendered.contains("tsd_id"), "{rendered}");
+        assert!(
+            rendered.contains("stops[1]{day,seq,arrive,stay_min,name,type,city,poi_id}:"),
+            "{rendered}"
+        );
     }
 }
