@@ -563,9 +563,9 @@ the user's HOME.
   file access; `main` does no eager network or file I/O.
 - `TravelScheduleDetail/Get` for own trips has the same
   `{travelScheduleInfo, dayList}` shape as the guest-readable
-  `TravelScheduleDetail/Preview?TravelScheduleId=` (protocol.md, "Shared
-  trip previews"), so `trip view` can be developed and tested against
-  that fixture before a member token is available. Milestone 3 turned
+  `TravelScheduleDetail/Preview?TravelScheduleId=` (protocol.md, "Trip
+  previews"), so `trip view` can be developed and tested against that
+  fixture before a member token is available. Milestone 3 turned
   that endpoint into `trip preview` and reuses the same fixture for both
   commands' tests. The `Add` and
   `TravelScheduleCopy` responses were not observed; confirm them in the

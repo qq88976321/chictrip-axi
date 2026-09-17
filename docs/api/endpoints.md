@@ -247,7 +247,7 @@ otherwise. Rows marked `(bundle)` in the Params column were read from the web ap
 | POST | `/TravelScheduleDetail/Copy` |  |  |  |
 | DELETE | `/TravelScheduleDetail/Delete` | member | TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime (body on DELETE; bundle) | returns the new updateTime |
 | GET | `/TravelScheduleDetail/Get` | token | travelScheduleId, TravelScheduleUpdateTime, isMyTravelSchedule | {travelScheduleInfo, dayList[].tsdList[]}; guest on a shared trip -> 006 (live) |
-| GET | `/TravelScheduleDetail/Preview` | guest | TravelScheduleId | shared-trip preview: {travelScheduleInfo, dayList} (live); no leading slash in the bundle |
+| GET | `/TravelScheduleDetail/Preview` | guest | TravelScheduleId | preview of ANY trip by id, shared or not (live, an unshared own trip included): {travelScheduleInfo, dayList}; unknown or deleted id -> 011 `TravelSchedule has been deleted`; missing or malformed id -> 002 non-empty body; no leading slash in the bundle |
 | GET | `/TravelScheduleDetail/GetAddWhere` | member | poiId, travelScheduleId, travelScheduleUpdateTime=0 (bundle) | dayList[].addWhereList[] insertion slots: addWhereId, arrival/departure tsd names, isBestOfDay, isBestOfAll |
 | GET | `/TravelScheduleDetail/GetAddWhereBestAll` |  |  |  |
 | GET | `/TravelScheduleDetail/GetDetail` |  |  |  |

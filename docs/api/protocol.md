@@ -56,7 +56,7 @@ A client must accept both.
 | 004  | update-time conflict; `data.updateTime` is current   | `TravelScheduleDetail/VerifyUpdateTime`            |
 | 006  | quit collaboration / no access to the schedule       | `TravelScheduleDetail/Get` on someone else's trip  |
 | 007, 012, 013, 014 | app-level dialogs in the SPA (014 carries `message`) | not reproduced                       |
-| 011  | travel schedule deleted or unknown                   | `ExpertTour/TourV2` with a bad id                  |
+| 011  | travel schedule deleted or unknown                   | `ExpertTour/TourV2` with a bad id; `TravelScheduleDetail/Preview` with an unknown or deleted id (`TravelSchedule has been deleted`) |
 
 The SPA treats `003` as "refresh the token and retry once"; on refresh
 failure it clears the session.
@@ -221,17 +221,33 @@ Location/GetPopularDestination: [{image, locationType, locationId, name,
   zoomLevel, latitude, longitude}]
 ```
 
-## Shared trip previews: `GET TravelScheduleDetail/Preview`
+## Trip previews: `GET TravelScheduleDetail/Preview`
 
-The sitemap advertises thousands of shared trips as
-`/?action=preView&preViewTravelId=<uuid>`. The web app loads them with
+`robots.txt` names the sitemap index `https://www.chictrip.com.tw/Sitemap`
+(`/sitemap.xml` is the SPA's 404 page); its child urlset
+`https://www.chictrip.com.tw/UrlSets/ChicTripTs1` advertises thousands of
+shared trips as `/?action=preView&preViewTravelId=<uuid>`. The web app
+loads them with
 `GET TravelScheduleDetail/Preview?TravelScheduleId=<uuid>` (path
 without a leading slash in the bundle; works with the guest token) and
 gets `{travelScheduleInfo, dayList}`, the same shape as
 `TravelScheduleDetail/Get` returns for the owner. `TravelScheduleDetail/
 Get` itself answers `006 Quit collaboration` for a trip the token does
-not own or collaborate on. A missing `TravelScheduleId` is the usual
-"non-empty request body" message.
+not own or collaborate on. A missing or malformed `TravelScheduleId` is
+the usual `002` "non-empty request body" message.
+
+Verified live on 2026-09-18 with the guest token (`trip preview`):
+
+- Preview is gated on nothing but the id. A trip created seconds earlier
+  in the test account and never shared answered `001` with its full
+  detail to the guest token. "Shared" is a notion of the web UI; any
+  trip id is readable by anyone who has it.
+- An unknown id, and a trip just deleted with `TravelSchedule/Delete`,
+  both answer `011 TravelSchedule has been deleted`.
+- `travelScheduleInfo.permission` is the OWNER's value (`Owner` when a
+  guest reads someone else's trip), not the caller's; `note` is `""`
+  when unset; `viewMode` is `DetailMode`.
+- A member token is accepted too and gets the same answer.
 
 `travelScheduleInfo` carries `id, name, startDate, endDate, totalDay,
 trafficType, updateTime, permission, viewMode, memberId, coverUrl,
