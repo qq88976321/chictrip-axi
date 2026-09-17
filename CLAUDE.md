@@ -9,20 +9,23 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
 
 ## Quick facts
 
-- Milestone: the write vertical slice (2026-09-18). Fifteen commands
-  (`auth set/status/clear`, `trip list/create/view/add/remove/delete`,
-  `tour list/view/copy`, `poi search/view`, `location search`) plus the
-  home view, over
-  the shared HTTP/output/error/auth layers. Designed in
+- Milestone: trip previews and session integration (2026-09-18).
+  Eighteen commands (`auth set/status/clear`,
+  `trip list/create/view/preview/add/remove/delete`,
+  `tour list/view/copy`, `poi search/view`, `location search`,
+  `setup skill/hooks`) plus the home view, over the shared
+  HTTP/output/error/auth layers. Designed in
   `docs/design/axi-interface.md`, which also lists what was left out.
-  Verified live the same day against api.chictrip.com.tw with a member
-  token, `trip create` included once it sent a real system cover id:
-  chicTrip's `TravelSchedule/AddV2` answers the generic `002 A non-empty
-  request body is required` when `CoverMediaId` or the label id is
-  empty or `LocationKey[]` is missing (`docs/api/protocol.md`). Next
-  milestone:
-  `skills/chictrip-axi/SKILL.md` generated from the home view's command
-  index with a `--check` gate, and `setup hooks`.
+  The chicTrip commands were verified live against api.chictrip.com.tw
+  with a member token on 2026-09-18, `trip create` included once it sent
+  a real system cover id: chicTrip's `TravelSchedule/AddV2` answers the
+  generic `002 A non-empty request body is required` when `CoverMediaId`
+  or the label id is empty or `LocationKey[]` is missing
+  (`docs/api/protocol.md`). `trip preview` reads any trip by id with the
+  guest token through `TravelScheduleDetail/Preview` (verified live
+  2026-09-18, a private trip of the test account included: chicTrip
+  gates that endpoint on nothing but the id); `setup skill` and
+  `setup hooks` touch no network at all.
 - Published 2026-09-17: PUBLIC GitHub repo `qq88976321/chictrip-axi`
   (remote `origin`, https), pushed by the user. VERIFIED the same day
   via the Actions API: the ci workflow is green on master and the
@@ -62,8 +65,9 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
 
 ```
 just gate      # THE quality gate: fmt --check, clippy -D warnings,
-               #   cargo test, cargo build --release. Run before every
-               #   commit; all four must pass.
+               #   cargo test, cargo build --release, and
+               #   `setup skill --check`. Run before every commit; all
+               #   five must pass.
 just build     # debug build
 just test      # unit tests only
 just lint-sh   # shellcheck install.sh and scripts/test-install.sh.
@@ -101,8 +105,16 @@ just site-build / site-serve  # Zensical docs site (website/)
 - api/trips.rs the multi-call recipes and the updateTime chain
 - commands/    mod.rs holds what more than one noun needs (validation,
                value conversions, the trip and stop tables); auth.rs,
-               home.rs, location.rs, poi.rs, tour.rs, trip.rs are one noun each and
+               home.rs, location.rs, poi.rs, setup.rs, tour.rs, trip.rs
+               are one noun each and
                return a Document, never formatting or error text
+- commands/setup.rs  the two agent integrations; dispatched without a
+               `Context` so "touches no network" is a compile-time
+               property. `skills/chictrip-axi/SKILL.md` is GENERATED
+               from `skill_template.md` plus `home::COMMAND_INDEX`:
+               never hand-edit it, run `cargo run -- setup skill` and
+               commit the result (the gate and CI run
+               `setup skill --check`)
 - tests/cli.rs the binary against a `TcpListener` fixture server, with
                trimmed captures under tests/fixtures/
 
@@ -130,11 +142,12 @@ reliability is the other. Concretely:
   every subcommand keeps a concise `--help` with defaults and 2-3
   examples; `-V`/`--version` print the bare version and exit 0 before
   anything else loads.
-- Integration (next milestone): `skills/chictrip-axi/SKILL.md` is
-  generated from the same content as the home view (static: strip
-  live state) and a `--check` gate fails CI when the committed skill
-  drifts from the CLI; `setup hooks` installs a SessionStart hook on
-  explicit request only, never on first run.
+- Integration: `skills/chictrip-axi/SKILL.md` is generated from the same
+  content as the home view (static: no live state) and the `--check`
+  gate fails the build when the committed skill drifts from the CLI;
+  `setup hooks` installs a Claude Code SessionStart hook on explicit
+  request only, never on first run. The README and the docs site present
+  the two as alternatives, of which a user needs one.
 - Implement these once in a shared output/error layer; never
   re-implement the pattern inside a command module.
 - The toon-format encoder quotes any value containing `-`, `:`, or a
