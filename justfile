@@ -49,6 +49,7 @@ gate:
     cargo clippy --all-targets -- -D warnings
     cargo test
     cargo build --release
+    cargo run --quiet -- setup skill --check
 
 # Run the binary; pass extra args, e.g. `just run -- --help`.
 run *args:
