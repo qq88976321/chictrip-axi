@@ -1,5 +1,10 @@
 # Entry points for chictrip-axi development and release.
 
+# Docs toolchain: run Zensical via uvx (isolated, no venv to manage).
+# Pinned because Zensical is pre-1.0; bump this single line to upgrade
+# and keep .github/workflows/pages.yml in lockstep.
+zensical := "zensical@0.0.62"
+
 # List available recipes.
 default:
     @just --list
@@ -62,3 +67,12 @@ release-hook:
 # Bump version and tag vX.Y.Z locally (no push).
 release level="patch":
     cargo release {{level}} --execute
+
+# Build the docs site (website/, Zensical). Runs Zensical via uvx;
+# needs uv on PATH (no venv to activate).
+site-build:
+    cd website && uvx {{zensical}} build --clean
+
+# Serve the docs site locally at 0.0.0.0:8099 (Ctrl-C to stop).
+site-serve:
+    cd website && uvx {{zensical}} serve -a 0.0.0.0:8099
