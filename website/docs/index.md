@@ -35,23 +35,25 @@ the platform list, and building from source.
 ## At a glance
 
 ```
-chictrip-axi             # home view: what this binary is and what to run next
-chictrip-axi --help      # concise reference
-chictrip-axi --version   # bare version, e.g. chictrip-axi 0.0.1
+chictrip-axi                                  # home view: identity, live content, every command
+chictrip-axi poi search "Senso-ji"            # places and their ids
+chictrip-axi tour view <tour-id> --day 1      # an expert itinerary, one day
+chictrip-axi auth set --from-json -           # paste the token copied from the browser
+chictrip-axi trip add <trip-id> --day 2 --poi <poi-id>
 ```
 
-See [Usage](usage.md) for the home view, the exit codes, and the error
+Reads work with no setup at all. See [Usage](usage.md) for the command
+list, signing in, the output format, the exit codes, and the error
 contract.
 
 ## Status
 
 !!! note "Personal tool, built with heavy AI assistance (Claude Code)"
 
-    This is the infrastructure milestone: the binary, the installer, the
-    release pipeline, and this site are in place; the chicTrip API
-    commands land in the next milestone. It comes with no warranty and no
-    support commitment: issues and PRs are welcome and may still go
-    unanswered.
+    Fourteen commands over the chicTrip API: search places, read expert
+    itineraries, and build trips in your own account. It comes with no
+    warranty and no support commitment: issues and PRs are welcome and
+    may still go unanswered.
 
     An independent project, not affiliated with or endorsed by chicTrip.
 
