@@ -32,8 +32,9 @@ gh run watch
 ```
 
 The site lands at <https://qq88976321.github.io/chictrip-axi/>, matching
-`site_url` in `website/zensical.toml`. Once it deploys, delete the
-`STATUS: UNVERIFIED` block at the top of `.github/workflows/pages.yml`.
+`site_url` in `website/zensical.toml`. A pages run that started before
+the Pages source was switched fails at `actions/configure-pages`; re-run
+it once the switch is done.
 
 ## Cutting a release
 

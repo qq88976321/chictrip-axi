@@ -1,11 +1,8 @@
 # GitHub Pages: build the Zensical docs site in website/ and deploy it.
 #
 # ONE-TIME MANUAL STEP (repo owner): GitHub -> Settings -> Pages ->
-# Build and deployment -> Source: "GitHub Actions".
-#
-# STATUS: UNVERIFIED - authored 2026-09-17, never executed (no remote /
-# Pages yet). Verify on the first push after Pages is enabled, then
-# delete this status block.
+# Build and deployment -> Source: "GitHub Actions". A run that starts
+# before that switch fails at actions/configure-pages; re-run it after.
 name: pages
 
 on:

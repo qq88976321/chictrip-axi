@@ -18,11 +18,10 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   (remote `origin`, https), pushed by the user. VERIFIED the same day
   via the Actions API: the ci workflow is green on master and the
   release workflow published v0.0.1 (tag + GitHub Release with assets).
-  Pages is enabled, but its first two runs failed at
-  `actions/configure-pages` because they ran before Pages was switched
-  to "GitHub Actions"; the site stays 404 until the workflow is re-run
-  (`gh workflow run pages.yml`, USER-ONLY). Delete the STATUS block in
-  pages.yml once a deployment succeeds. Development on branch `master`
+  Pages is enabled and the docs site is live at
+  https://qq88976321.github.io/chictrip-axi/ (a pages run that starts
+  before Pages is switched to "GitHub Actions" fails at
+  `actions/configure-pages`; re-run it). Development on branch `master`
   (cargo-release `allow-branch = ["master"]`). The version line starts
   at 0.0.1 (first tag v0.0.1, 2026-09-17); later releases are
   `just release patch|minor|major` and tags are SSH-signed
@@ -129,11 +128,9 @@ reliability is the other. Concretely:
   platform tables (README, website/docs/install.md); `just test-install`
   catches the drift without cutting a release.
 - Docs site: website/ (Zensical, `just site-build`), deployed by
-  `.github/workflows/pages.yml` on pushes touching website/. Enabling
-  Pages (Settings -> Pages -> Source: GitHub Actions) is USER-ONLY; the
-  workflow carries a STATUS: UNVERIFIED block until the first deployment
-  succeeds. The Zensical pin lives in the justfile and in pages.yml;
-  bump both together.
+  `.github/workflows/pages.yml` on pushes touching website/ (verified
+  live 2026-09-17). Pages settings are USER-ONLY. The Zensical pin lives
+  in the justfile and in pages.yml; bump both together.
 
 ## Conventions
 
