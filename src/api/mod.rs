@@ -17,6 +17,7 @@ pub const DEFAULT_BASE_URL: &str = "https://api.chictrip.com.tw/";
 pub enum Method {
     Get,
     Post,
+    Put,
     Delete,
 }
 
@@ -131,6 +132,12 @@ impl Client {
         self.call(Method::Post, path, &[], form, true)?.into_data()
     }
 
+    /// Every schedule mutation that edits an existing row is a PUT with a
+    /// form body; a JSON body answers the generic "non-empty request body".
+    pub fn put_form(&self, path: &str, form: &[(&str, String)]) -> Result<Value, AxiError> {
+        self.call(Method::Put, path, &[], form, false)?.into_data()
+    }
+
     pub fn delete_form(&self, path: &str, form: &[(&str, String)]) -> Result<Value, AxiError> {
         self.call(Method::Delete, path, &[], form, false)?
             .into_data()
@@ -219,6 +226,13 @@ impl Client {
             }
             Method::Post => {
                 let mut request = self.agent.post(&url).query_pairs(pairs);
+                for (key, value) in headers {
+                    request = request.header(key, value);
+                }
+                request.send_form(fields)
+            }
+            Method::Put => {
+                let mut request = self.agent.put(&url).query_pairs(pairs);
                 for (key, value) in headers {
                     request = request.header(key, value);
                 }
