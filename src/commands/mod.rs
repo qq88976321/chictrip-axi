@@ -12,7 +12,7 @@ pub mod setup;
 pub mod tour;
 pub mod trip;
 
-use crate::api::types::{Day, TripSummary};
+use crate::api::types::{Day, TripSummary, Tsd};
 use crate::datetime::format_utc_date;
 use crate::error::AxiError;
 use crate::output::Table;
@@ -142,6 +142,26 @@ pub fn select_days(
         .collect())
 }
 
+/// chicTrip keeps the computed arrival and the pinned one apart, and
+/// `isUseCustomArrivalTime` says which one it shows.
+fn shown_arrival(stop: &Tsd) -> Option<String> {
+    if stop.is_use_custom_arrival_time {
+        return stop
+            .custom_arrival_time
+            .clone()
+            .or_else(|| stop.arrival_time.clone());
+    }
+    stop.arrival_time.clone()
+}
+
+/// The computed departure is derivable from arrival plus stay, so only a
+/// pinned one is worth a column.
+fn shown_departure(stop: &Tsd) -> Option<String> {
+    stop.is_use_custom_departure_time
+        .then(|| stop.custom_departure_time.clone())
+        .flatten()
+}
+
 /// The stop table shared by `tour view` and `trip view`; `trip view` shows the
 /// `tsd_id` that `trip remove` takes.
 pub fn stops_table(days: &[Day], full: bool, with_tsd_id: bool) -> Table {
@@ -154,7 +174,14 @@ pub fn stops_table(days: &[Day], full: bool, with_tsd_id: bool) -> Table {
     }
     defaults.push("city");
     defaults.push("poi_id");
-    let detail_columns = ["note", "traffic", "traffic_min", "flight"];
+    let detail_columns = [
+        "note",
+        "traffic",
+        "traffic_min",
+        "depart",
+        "category",
+        "flight",
+    ];
     if full {
         defaults.extend(detail_columns);
     } else {
@@ -167,7 +194,7 @@ pub fn stops_table(days: &[Day], full: bool, with_tsd_id: bool) -> Table {
             table.push(&[
                 ("day", count(day.day.or(stop.day))),
                 ("seq", Value::from(index as i64 + 1)),
-                ("arrive", value(&stop.arrival_time)),
+                ("arrive", value(&shown_arrival(stop))),
                 ("stay_min", count(stop.stay_time)),
                 ("name", value(&stop.name)),
                 ("type", value(&stop.tsd_type)),
@@ -177,6 +204,8 @@ pub fn stops_table(days: &[Day], full: bool, with_tsd_id: bool) -> Table {
                 ("note", value(&stop.note)),
                 ("traffic", value(&stop.arrival_traffic_type)),
                 ("traffic_min", count(stop.arrival_traffic_time)),
+                ("depart", value(&shown_departure(stop))),
+                ("category", value(&stop.category_icon)),
                 ("flight", value(&stop.flight_number)),
             ]);
         }
@@ -187,7 +216,6 @@ pub fn stops_table(days: &[Day], full: bool, with_tsd_id: bool) -> Table {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::types::Tsd;
     use crate::output::{Document, render};
 
     fn days() -> Vec<Day> {
@@ -263,6 +291,42 @@ mod tests {
         assert_eq!(select_days(&days(), Some(2), Some(2)).unwrap().len(), 1);
         assert!(select_days(&days(), Some(3), Some(2)).is_err());
         assert!(select_days(&days(), Some(0), Some(2)).is_err());
+    }
+
+    #[test]
+    fn stops_table_prefers_the_pinned_times_and_reveals_them_under_full() {
+        let days = vec![Day {
+            day: Some(1),
+            tsd_list: vec![Tsd {
+                id: Some("t1".into()),
+                name: Some("Senso-ji".into()),
+                arrival_time: Some("10:12".into()),
+                is_use_custom_arrival_time: true,
+                custom_arrival_time: Some("10:30".into()),
+                is_use_custom_departure_time: true,
+                custom_departure_time: Some("12:00".into()),
+                category_icon: Some("enterTainment".into()),
+                ..Tsd::default()
+            }],
+            ..Day::default()
+        }];
+        let mut doc = Document::new();
+        doc.set_table("stops", stops_table(&days, true, true));
+        let rendered = render(&doc, false);
+        assert!(
+            rendered.contains("note,traffic,traffic_min,depart,category,flight}:"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("1,1,\"10:30\","), "{rendered}");
+        assert!(rendered.contains("\"12:00\",enterTainment,"), "{rendered}");
+
+        let mut doc = Document::new();
+        doc.set_table("stops", stops_table(&days, false, true));
+        let rendered = render(&doc, false);
+        assert!(
+            rendered.contains("stops[1]{day,seq,arrive,stay_min,name,type,tsd_id,city,poi_id}:"),
+            "{rendered}"
+        );
     }
 
     #[test]

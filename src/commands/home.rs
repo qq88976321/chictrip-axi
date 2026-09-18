@@ -21,7 +21,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
     ("auth clear", "Forget the stored member token"),
     ("trip list", "My trips (newest first)"),
     ("trip create --name --start --end", "Create an empty trip"),
-    ("trip view <trip-id>", "Stops of a trip day by day"),
+    (
+        "trip view <trip-id>",
+        "Stops of a trip day by day (--full for notes and legs)",
+    ),
     (
         "trip preview <trip-id>",
         "Stops of any trip by id (no login needed)",

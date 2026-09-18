@@ -21,6 +21,7 @@ const TOUR_LIST: &str = include_str!("fixtures/tour_list.json");
 const TRIP_LIST: &str = include_str!("fixtures/trip_list.json");
 const TRIP_DETAIL: &str = include_str!("fixtures/trip_detail.json");
 const TRIP_DETAIL_AFTER_ADD: &str = include_str!("fixtures/trip_detail_after_add.json");
+const TRIP_DETAIL_FULL: &str = include_str!("fixtures/trip_detail_full.json");
 const USER_LABELS: &str = include_str!("fixtures/user_labels.json");
 const ADD_WHERE: &str = include_str!("fixtures/add_where.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
@@ -479,6 +480,103 @@ fn trip_add_skips_a_poi_already_in_the_day_without_writing() {
             .paths()
             .contains(&"/TravelScheduleDetail/Add".to_string()),
         "a skipped POI is never written"
+    );
+}
+
+/// The fixture server for the milestone 4 trip commands: a current update
+/// time and the three-day probe trip.
+fn trip_server<H>(handler: H) -> Server
+where
+    H: Fn(&Request, usize) -> Option<(u16, String)> + Send + 'static,
+{
+    Server::start(move |request, seen| {
+        if let Some(answer) = handler(request, seen) {
+            return answer;
+        }
+        match request.path.as_str() {
+            "/TravelScheduleDetail/VerifyUpdateTime" => {
+                envelope("001", r#"{"updateTime":100}"#, "null")
+            }
+            "/TravelScheduleDetail/Get" => ok(TRIP_DETAIL_FULL),
+            _ => envelope("002", "null", r#""404""#),
+        }
+    })
+}
+
+#[test]
+fn trip_view_full_shows_pinned_times_notes_and_the_trip_note() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("view-full");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "view",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--full",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("\n  note: Buy the 72h subway pass at Narita\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "stops[4]{day,seq,arrive,stay_min,name,type,tsd_id,city,poi_id,note,traffic,traffic_min,depart,category,flight}:"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\n  1,2,\"10:30\",90,\"Senso-ji\","),
+        "the pinned arrival wins over the computed one: {stdout}"
+    );
+    assert!(
+        stdout.contains("\"Reservation 19:00\",Transit,12,\"12:00\",enterTainment,null\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("--full` for notes and legs"), "{stdout}");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "view", "3c1d0a2e-1111-4111-8111-111111111111"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("stops[4]{day,seq,arrive,stay_min,name,type,tsd_id,city,poi_id}:"),
+        "the default schema is unchanged: {stdout}"
+    );
+}
+
+#[test]
+fn trip_preview_full_keeps_the_detail_columns_without_the_tsd_id() {
+    let server = Server::start(|_, _| ok(TRIP_DETAIL_FULL));
+    let sandbox = Sandbox::new("preview-full");
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "preview",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--full",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains(
+            "stops[4]{day,seq,arrive,stay_min,name,type,city,poi_id,note,traffic,traffic_min,depart,category,flight}:"
+        ),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("tsd_id"), "{stdout}");
+    assert!(
+        !stdout.contains("72h subway pass"),
+        "Preview hides the trip note: {stdout}"
     );
 }
 

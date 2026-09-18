@@ -6,7 +6,7 @@ use crate::api::types::{CreatedTrip, Day, TripDetail};
 use crate::cli::{Context, TripCommand};
 use crate::datetime::Date;
 use crate::error::{AxiError, ErrorCode};
-use crate::output::{Document, Table};
+use crate::output::{Document, Table, truncate};
 use serde_json::Value;
 
 const TRAFFIC_MODES: [&str; 5] = ["Custom", "Transit", "Driving", "Walk", "PublicTransport"];
@@ -23,8 +23,8 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             location,
             duplicate,
         } => create(ctx, name, start, end, traffic, location, *duplicate),
-        TripCommand::View { trip_id, day } => view(ctx, trip_id, *day),
-        TripCommand::Preview { trip_id, day } => preview(ctx, trip_id, *day),
+        TripCommand::View { trip_id, day, full } => view(ctx, trip_id, *day, *full),
+        TripCommand::Preview { trip_id, day, full } => preview(ctx, trip_id, *day, *full),
         TripCommand::Add {
             trip_id,
             day,
@@ -183,18 +183,26 @@ fn created_help(id: &str) -> Vec<String> {
     ]
 }
 
-fn view(ctx: &Context, trip_id: &str, day: Option<i64>) -> Result<Document, AxiError> {
+fn view(ctx: &Context, trip_id: &str, day: Option<i64>, full: bool) -> Result<Document, AxiError> {
     let client = ctx.member_client("trip view")?;
     let update_time = trips::current_update_time(&client, trip_id)?;
     let detail = trips::trip_detail(&client, trip_id, update_time)?;
-    let mut doc = trip_document(&detail, day)?;
-    doc.set_strings(
-        "help",
-        &[
-            format!("Run `chictrip-axi trip add {trip_id} --day <n> --poi <poi-id>` to add stops"),
-            format!("Run `chictrip-axi trip remove {trip_id} --stop <tsd_id>` to remove one"),
-        ],
-    );
+    let (mut doc, note_was_cut) = trip_document(&detail, day, full)?;
+    let mut help = vec![
+        format!("Run `chictrip-axi trip add {trip_id} --day <n> --poi <poi-id>` to add stops"),
+        format!(
+            "Run `chictrip-axi trip edit {trip_id} --stop <tsd_id> --stay <min>` to change a stop"
+        ),
+        format!(
+            "Run `chictrip-axi trip view {trip_id} --full` for notes and legs and pinned times"
+        ),
+    ];
+    if note_was_cut {
+        help.push(format!(
+            "Run `chictrip-axi trip note {trip_id}` for the whole trip note"
+        ));
+    }
+    doc.set_strings("help", &help);
     Ok(doc)
 }
 
@@ -208,24 +216,41 @@ fn trip_header(info: &crate::api::types::TripInfo) -> Document {
     header
 }
 
-fn trip_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiError> {
+/// Also reports whether the trip note was truncated, so `view` can offer
+/// the command that prints the whole thing.
+fn trip_document(
+    detail: &TripDetail,
+    day: Option<i64>,
+    full: bool,
+) -> Result<(Document, bool), AxiError> {
     let info = &detail.travel_schedule_info;
     let mut header = trip_header(info);
     header.set("permission", value(&info.permission));
     header.set("update_time", count(info.update_time));
+    let mut note_was_cut = false;
+    if let Value::String(note) = value(&info.note) {
+        let (text, cut) = truncate(&note);
+        note_was_cut = cut;
+        header.set("note", text);
+    }
 
     let days = select_days(&detail.day_list, day, info.total_day)?;
     let mut doc = Document::new();
     doc.set_object("trip", header);
-    doc.set_table("stops", stops_table(&days, false, true));
+    doc.set_table("stops", stops_table(&days, full, true));
     doc.set_primary("stops");
-    Ok(doc)
+    Ok((doc, note_was_cut))
 }
 
-fn preview(ctx: &Context, trip_id: &str, day: Option<i64>) -> Result<Document, AxiError> {
+fn preview(
+    ctx: &Context,
+    trip_id: &str,
+    day: Option<i64>,
+    full: bool,
+) -> Result<Document, AxiError> {
     let client = ctx.client()?;
     let detail = trips::trip_preview(&client, trip_id)?;
-    let mut doc = preview_document(&detail, day)?;
+    let mut doc = preview_document(&detail, day, full)?;
     doc.set_strings(
         "help",
         &[
@@ -239,12 +264,16 @@ fn preview(ctx: &Context, trip_id: &str, day: Option<i64>) -> Result<Document, A
 /// A viewer cannot write a trip that is not theirs, so the owner's
 /// `permission` and `update_time` and the per-stop `tsd_id` that only
 /// `trip remove` takes would all be noise here.
-fn preview_document(detail: &TripDetail, day: Option<i64>) -> Result<Document, AxiError> {
+fn preview_document(
+    detail: &TripDetail,
+    day: Option<i64>,
+    full: bool,
+) -> Result<Document, AxiError> {
     let info = &detail.travel_schedule_info;
     let days = select_days(&detail.day_list, day, info.total_day)?;
     let mut doc = Document::new();
     doc.set_object("trip", trip_header(info));
-    doc.set_table("stops", stops_table(&days, false, false));
+    doc.set_table("stops", stops_table(&days, full, false));
     doc.set_primary("stops");
     Ok(doc)
 }
@@ -482,7 +511,7 @@ mod tests {
             },
             day_list: vec![],
         };
-        let doc = trip_document(&detail, None).unwrap();
+        let (doc, _) = trip_document(&detail, None, false).unwrap();
         assert!(crate::output::render(&doc, false).contains("stops[0]:"));
     }
 
@@ -510,7 +539,8 @@ mod tests {
                 ..Day::default()
             }],
         };
-        let rendered = crate::output::render(&preview_document(&detail, None).unwrap(), false);
+        let rendered =
+            crate::output::render(&preview_document(&detail, None, false).unwrap(), false);
         assert!(!rendered.contains("permission"), "{rendered}");
         assert!(!rendered.contains("update_time"), "{rendered}");
         assert!(!rendered.contains("tsd_id"), "{rendered}");

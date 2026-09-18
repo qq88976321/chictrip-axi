@@ -1,0 +1,117 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "travelScheduleInfo": {
+   "id": "3c1d0a2e-1111-4111-8111-111111111111",
+   "name": "Tokyo temples",
+   "startDate": "2026/10/01",
+   "endDate": "2026/10/03",
+   "totalDay": 3,
+   "trafficType": "Custom",
+   "updateTime": 1789710463,
+   "permission": "Owner",
+   "memberId": "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
+   "note": "Buy the 72h subway pass at Narita"
+  },
+  "dayList": [
+   {
+    "day": 1,
+    "date": "2026/10/01",
+    "trafficType": "Transit",
+    "tsdList": [
+     {
+      "id": "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "name": "Azumabashi pier",
+      "tsdType": "basic",
+      "poiId": "edd5509c-d852-41d1-9d27-0139d6d9f8f5",
+      "day": 1,
+      "cityName": "Tokyo",
+      "categoryIcon": "pin",
+      "note": "",
+      "arrivalTime": "09:00",
+      "stayTime": 60,
+      "arrivalTrafficType": "Custom",
+      "arrivalTrafficTime": 0,
+      "isUseCustomArrivalTime": false,
+      "customArrivalTime": null,
+      "isUseCustomDepartureTime": false,
+      "customDepartureTime": null,
+      "tsdRouteDetailId": null
+     },
+     {
+      "id": "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "name": "Senso-ji",
+      "tsdType": "basic",
+      "poiId": "8a48a94c-495f-44da-be0d-e1d7564f2b07",
+      "day": 1,
+      "cityName": "Tokyo",
+      "categoryIcon": "enterTainment",
+      "note": "Reservation 19:00",
+      "arrivalTime": "10:12",
+      "stayTime": 90,
+      "arrivalTrafficType": "Transit",
+      "arrivalTrafficTime": 12,
+      "isUseCustomArrivalTime": true,
+      "customArrivalTime": "10:30",
+      "isUseCustomDepartureTime": true,
+      "customDepartureTime": "12:00",
+      "tsdRouteDetailId": "route-2"
+     },
+     {
+      "id": "d0000000-cccc-4ccc-8ccc-cccccccccccc",
+      "name": "Tokyo Skytree",
+      "tsdType": "basic",
+      "poiId": "f1111111-d852-41d1-9d27-0139d6d9f8f5",
+      "day": 1,
+      "cityName": "Tokyo",
+      "categoryIcon": "enterTainment",
+      "note": "",
+      "arrivalTime": "12:25",
+      "stayTime": 45,
+      "arrivalTrafficType": "Custom",
+      "arrivalTrafficTime": 25,
+      "isUseCustomArrivalTime": false,
+      "customArrivalTime": null,
+      "isUseCustomDepartureTime": false,
+      "customDepartureTime": null,
+      "tsdRouteDetailId": "route-3"
+     }
+    ]
+   },
+   {
+    "day": 2,
+    "date": "2026/10/02",
+    "trafficType": "Custom",
+    "tsdList": [
+     {
+      "id": "e0000000-dddd-4ddd-8ddd-dddddddddddd",
+      "name": "Hakone shrine",
+      "tsdType": "basic",
+      "poiId": "a2222222-d852-41d1-9d27-0139d6d9f8f5",
+      "day": 2,
+      "cityName": "Hakone",
+      "categoryIcon": "enterTainment",
+      "note": "",
+      "arrivalTime": "09:30",
+      "stayTime": 60,
+      "arrivalTrafficType": "Custom",
+      "arrivalTrafficTime": 0,
+      "isUseCustomArrivalTime": false,
+      "customArrivalTime": null,
+      "isUseCustomDepartureTime": false,
+      "customDepartureTime": null,
+      "tsdRouteDetailId": null
+     }
+    ]
+   },
+   {
+    "day": 3,
+    "date": "2026/10/03",
+    "trafficType": "Custom",
+    "tsdList": []
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}
