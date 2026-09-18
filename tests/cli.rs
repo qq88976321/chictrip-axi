@@ -352,6 +352,35 @@ fn the_guest_token_refuses_member_commands_before_any_request() {
 }
 
 #[test]
+fn the_guest_token_refuses_the_new_member_commands_before_any_request() {
+    let server = Server::start(|_, _| ok(TRIP_DETAIL_FULL));
+    let sandbox = Sandbox::new("guest-editing");
+    let trip = "3c1d0a2e-1111-4111-8111-111111111111";
+    let stop = "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+
+    for args in [
+        vec!["trip", "edit", trip, "--stop", stop, "--stay", "30"],
+        vec!["trip", "note", trip, "--stop", stop],
+        vec!["trip", "leg", trip, "--stop", stop],
+        vec!["trip", "traffic", trip, "--day", "1", "--mode", "driving"],
+        vec!["trip", "move", trip, "--stop", stop, "--position", "first"],
+        vec!["poi", "create", "--name", "x", "--at", "35.7,139.7"],
+    ] {
+        let (stdout, code) = run(&server, &sandbox.auth_file(), &args);
+        assert_eq!(code, 1, "{args:?} {stdout}");
+        assert!(
+            stdout.starts_with("error: auth_required\n"),
+            "{args:?} {stdout}"
+        );
+        assert!(stdout.contains("auth set --from-json -"), "{stdout}");
+    }
+    assert!(
+        server.requests().is_empty(),
+        "no request without a member token"
+    );
+}
+
+#[test]
 fn an_expired_token_is_refreshed_and_the_request_replayed() {
     let server = Server::start(|request, seen| match request.path.as_str() {
         "/TravelSchedule/GetMyAndCollaboration" if seen == 0 => envelope("003", "null", "null"),
