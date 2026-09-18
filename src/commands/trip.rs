@@ -507,6 +507,7 @@ mod tests {
                     name: Some("Kaminarimon".into()),
                     ..Tsd::default()
                 }],
+                ..Day::default()
             }],
         };
         let rendered = crate::output::render(&preview_document(&detail, None).unwrap(), false);

@@ -186,11 +186,13 @@ mod tests {
                     tsd_type: Some("poi".into()),
                     ..Tsd::default()
                 }],
+                ..Day::default()
             },
             Day {
                 day: Some(2),
                 date: Some("2026/10/02".into()),
                 tsd_list: vec![],
+                ..Day::default()
             },
         ]
     }
