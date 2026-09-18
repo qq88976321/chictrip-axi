@@ -4,6 +4,39 @@ All notable changes to this project are documented in this file.
 The format is based on Keep a Changelog, and this project adheres to
 Conventional Commits.
 
+## [0.1.1] - 2026-09-29
+
+### Features
+
+- **api**: Add PUT transport
+- **api**: Decode edit info, route lists, custom times, and day traffic
+- **cli**: Add the clock, minutes, and point validators
+- **trip**: Show notes, legs, and categories with trip view --full
+- **trip**: Insert at the start or after a stop with trip add
+- **trip**: Add trip edit for a stop's times and category and name
+- **trip**: Add trip note for the trip and its stops
+- **trip**: Add trip leg for how a stop is reached
+- **trip**: Add trip traffic for a day's default mode
+- **trip**: Add trip move to reorder a day
+- **poi**: Add poi create for places chicTrip does not list
+- **setup**: Teach the skill and the description the editing commands
+
+### Refactor
+
+- **api**: Share the update-time retry between add and remove
+
+### Documentation
+
+- **api**: Record the edit, note, leg, reorder, copy, and custom poi flows
+- **design**: Record milestone 4 and what the live run corrected
+- Document the twenty-four commands in the README
+- Bring the repo constitution up to milestone 4
+- **site**: Add the editing commands to the usage and index pages
+
+### Testing
+
+- Refuse the new member commands as a guest before any request
+
 ## [0.1.0] - 2026-09-18
 
 ### Features
