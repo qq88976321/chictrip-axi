@@ -26,6 +26,8 @@ const USER_LABELS: &str = include_str!("fixtures/user_labels.json");
 const ADD_WHERE: &str = include_str!("fixtures/add_where.json");
 const ADD_WHERE_FULL: &str = include_str!("fixtures/add_where_full.json");
 const ADD_WHERE_PREPENDED: &str = include_str!("fixtures/add_where_prepended.json");
+const EDIT_INFO: &str = include_str!("fixtures/edit_info.json");
+const EDIT_INFO_AFTER: &str = include_str!("fixtures/edit_info_after.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -752,6 +754,237 @@ fn trip_add_rejects_after_together_with_position() {
     assert_eq!(code, 2, "{stdout}");
     assert!(stdout.starts_with("error: usage\n"), "{stdout}");
     assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+const STOP: &str = "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TRIP: &str = "3c1d0a2e-1111-4111-8111-111111111111";
+
+#[test]
+fn trip_edit_sends_the_merged_update_form_and_re_reads() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/TravelScheduleDetail/GetEditInfo" if seen == 0 => Some(ok(EDIT_INFO)),
+        "/TravelScheduleDetail/GetEditInfo" => Some(ok(EDIT_INFO_AFTER)),
+        "/TravelScheduleDetail/Update" => Some(envelope("001", "1789710700", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("edit");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "edit",
+            TRIP,
+            "--stop",
+            STOP,
+            "--stay",
+            "120",
+            "--category",
+            "food",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+
+    let update = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/Update")
+        .expect("Update was called");
+    assert_eq!(update.method, "PUT");
+    assert_eq!(update.field("StayTime").as_deref(), Some("120"));
+    assert_eq!(update.field("IsUseCustomArrivalTime").as_deref(), Some("1"));
+    assert_eq!(
+        update.field("CustomArrivalTime").as_deref(),
+        Some("10%3A30")
+    );
+    assert_eq!(
+        update.field("IsUseCustomDepartureTime").as_deref(),
+        Some("1")
+    );
+    assert_eq!(
+        update.field("PoiClassificationId").as_deref(),
+        Some("9449daa2-12ae-4a65-aa31-8ef93283763f")
+    );
+    assert_eq!(
+        update.field("travelScheduleUpdateTime").as_deref(),
+        Some("100")
+    );
+
+    assert!(stdout.contains("\n  category: food\n"), "{stdout}");
+    assert!(stdout.contains("\n  type: basic\n"), "{stdout}");
+    assert!(
+        stdout.contains("\n  arrive: \"10:30\"\n  arrive_custom: true\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\n  stay_min: 120\n"), "{stdout}");
+    assert!(
+        stdout.contains("\nchanged[2]: category,stay_min\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\nupdate_time: 1789710700\n"), "{stdout}");
+    assert_eq!(
+        server.paths(),
+        vec![
+            "/TravelScheduleDetail/VerifyUpdateTime",
+            "/TravelScheduleDetail/GetEditInfo",
+            "/TravelScheduleDetail/Update",
+            "/TravelScheduleDetail/GetEditInfo",
+        ]
+    );
+}
+
+#[test]
+fn trip_edit_with_the_current_values_is_a_no_op() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetail/GetEditInfo" => Some(ok(EDIT_INFO)),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("edit-noop");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip", "edit", TRIP, "--stop", STOP, "--stay", "90", "--arrive", "10:30",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("\nchanged[0]:\n"), "{stdout}");
+    assert!(
+        stdout.contains("note: \"already as requested (no-op)\""),
+        "{stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/Update".to_string()),
+        "a no-op never writes"
+    );
+}
+
+#[test]
+fn trip_edit_rejects_bad_flags_before_any_request() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("edit-usage");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    for args in [
+        vec!["trip", "edit", TRIP, "--stop", STOP, "--arrive", "25:00"],
+        vec!["trip", "edit", TRIP, "--stop", STOP, "--stay", "2000"],
+        vec!["trip", "edit", TRIP, "--stop", STOP],
+    ] {
+        let (stdout, code) = run(&server, &sandbox.auth_file(), &args);
+        assert_eq!(code, 2, "{args:?} {stdout}");
+        assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    }
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+#[test]
+fn trip_edit_with_an_unknown_category_lists_the_live_vocabulary() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetail/GetEditInfo" => Some(ok(EDIT_INFO)),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("edit-category");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "edit", TRIP, "--stop", STOP, "--category", "hotel"],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(
+        stdout.contains("valid categories: enterTainment,food,"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("landing"), "{stdout}");
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/Update".to_string()),
+        "an unknown category never writes"
+    );
+}
+
+#[test]
+fn trip_edit_on_a_stop_of_another_trip_is_not_found() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetail/GetEditInfo" => {
+            Some(envelope("002", "null", r#""TSD Id not found""#))
+        }
+        _ => None,
+    });
+    let sandbox = Sandbox::new("edit-missing");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "edit",
+            TRIP,
+            "--stop",
+            "00000000-0000-0000-0000-000000000000",
+            "--stay",
+            "30",
+        ],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: not_found\n"), "{stdout}");
+    assert!(stdout.contains("is not in trip"), "{stdout}");
+    assert!(stdout.contains("trip view"), "{stdout}");
+}
+
+#[test]
+fn trip_edit_retries_once_on_an_update_time_conflict() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/TravelScheduleDetail/VerifyUpdateTime" if seen == 0 => {
+            Some(envelope("001", r#"{"updateTime":100}"#, "null"))
+        }
+        "/TravelScheduleDetail/VerifyUpdateTime" => Some(envelope(
+            "004",
+            r#"{"updateTime":150}"#,
+            r#""Update time conflict""#,
+        )),
+        "/TravelScheduleDetail/GetEditInfo" if seen == 0 => Some(ok(EDIT_INFO)),
+        "/TravelScheduleDetail/GetEditInfo" => Some(ok(EDIT_INFO_AFTER)),
+        "/TravelScheduleDetail/Update" if seen == 0 => Some(envelope(
+            "004",
+            r#"{"updateTime":150}"#,
+            r#""Update time conflict""#,
+        )),
+        "/TravelScheduleDetail/Update" => Some(envelope("001", "1789710700", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("edit-conflict");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "edit", TRIP, "--stop", STOP, "--stay", "120"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let updates: Vec<Request> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.path == "/TravelScheduleDetail/Update")
+        .collect();
+    assert_eq!(updates.len(), 2, "the conflict is retried exactly once");
+    assert_eq!(
+        updates[0].field("travelScheduleUpdateTime").as_deref(),
+        Some("100")
+    );
+    assert_eq!(
+        updates[1].field("travelScheduleUpdateTime").as_deref(),
+        Some("150")
+    );
 }
 
 #[test]

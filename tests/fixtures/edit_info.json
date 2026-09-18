@@ -1,0 +1,108 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "id": "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "name": "Senso-ji",
+  "sort": 2,
+  "categoryId": "9b471f78-4c89-42ba-bf96-5c96388b6898",
+  "categoryName": "Sights",
+  "categoryIcon": "enterTainment",
+  "poiClassificationId": "9b471f78-4c89-42ba-bf96-5c96388b6898",
+  "arrivalTime": "10:12",
+  "stayTime": 90,
+  "departureTime": "12:00",
+  "isUseCustomArrivalTime": true,
+  "customArrivalTime": "10:30",
+  "isUseCustomDepartureTime": true,
+  "customDepartureTime": "12:00",
+  "address": "2 Chome-3-1 Asakusa, Taito City, Tokyo",
+  "categoryList": [
+   {
+    "id": "9b471f78-4c89-42ba-bf96-5c96388b6898",
+    "name": "Sights",
+    "icon": "enterTainment",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "9449daa2-12ae-4a65-aa31-8ef93283763f",
+    "name": "Food",
+    "icon": "food",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "5056226a-2b6b-41cb-ab90-f666f70c1587",
+    "name": "Shopping",
+    "icon": "shop",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "979a54ec-f96d-411b-a9ad-4bde4c64697b",
+    "name": "Lodging",
+    "icon": "moon",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "056f2fd9-2758-4375-b19c-93e879c30371",
+    "name": "Car rental",
+    "icon": "rentCar",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "76500eed-0998-4a35-820b-73794624ead5",
+    "name": "Station",
+    "icon": "train",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "59014389-fe12-4578-803e-1f80c4bce327",
+    "name": "Airport",
+    "icon": "plane",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "e2f9904d-d832-4a0f-ae2f-401c602c0c33",
+    "name": "Charging point",
+    "icon": "chargingPoint",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "b09c16a3-9eb8-47f8-9d9d-2bce1dc500f6",
+    "name": "Other",
+    "icon": "other",
+    "type": "Category",
+    "isSystem": true
+   },
+   {
+    "id": "86d7728e-f2b9-4806-8b1a-80e3ad449fea",
+    "name": "Take off",
+    "icon": "takeOff",
+    "type": "TsdCategory",
+    "isSystem": true
+   },
+   {
+    "id": "6c573c25-c600-477e-b418-18840e87dc2f",
+    "name": "Transfer",
+    "icon": "transfer",
+    "type": "TsdCategory",
+    "isSystem": true
+   },
+   {
+    "id": "8ec583a6-4ccb-4f75-b53f-de940de1ce03",
+    "name": "Landing",
+    "icon": "landing",
+    "type": "TsdCategory",
+    "isSystem": true
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

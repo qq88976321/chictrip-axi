@@ -248,6 +248,32 @@ A batch keeps the order it was given: --poi A --poi B --after X yields X, A, B."
         #[arg(long)]
         allow_duplicate: bool,
     },
+    /// Change a stop's stay, pinned times, category, or name
+    #[command(after_help = "Examples:
+  chictrip-axi trip edit <trip-id> --stop <tsd-id> --stay 90
+  chictrip-axi trip edit <trip-id> --stop <tsd-id> --arrive 10:30 --depart auto
+  chictrip-axi trip edit <trip-id> --stop <tsd-id> --category takeOff --name \"BR198 TPE-NRT\"
+--category is an icon as printed in the category column: enterTainment, food, shop, moon, rentCar, train, plane, chargingPoint, other; takeOff, transfer and landing turn the row into a flight. auto lets chicTrip compute a time again. The same values a second time are a no-op.")]
+    Edit {
+        trip_id: String,
+        /// tsd_id from `trip view`
+        #[arg(long, value_name = "TSD-ID")]
+        stop: String,
+        /// Minutes at the stop (0-1440)
+        #[arg(long, value_name = "MIN")]
+        stay: Option<i64>,
+        /// Pinned arrival HH:MM, or auto for chicTrip's computed time
+        #[arg(long, value_name = "HH:MM|auto")]
+        arrive: Option<String>,
+        /// Pinned departure HH:MM, or auto
+        #[arg(long, value_name = "HH:MM|auto")]
+        depart: Option<String>,
+        /// Category icon; takeOff, transfer and landing make a flight row
+        #[arg(long, value_name = "TYPE")]
+        category: Option<String>,
+        #[arg(long, value_name = "TEXT")]
+        name: Option<String>,
+    },
     /// Remove stops by their tsd_id
     #[command(after_help = "Examples:
   chictrip-axi trip remove <trip-id> --stop <tsd-id>

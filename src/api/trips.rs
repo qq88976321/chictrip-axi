@@ -3,13 +3,17 @@
 
 use super::Client;
 use super::types::{
-    AddWhereResult, AddedStop, Poi, SystemCover, TripDetail, TripSummary, UserLabel,
+    AddWhereResult, AddedStop, EditInfo, Poi, SystemCover, TripDetail, TripSummary, UserLabel,
 };
 use crate::error::{AxiError, ErrorCode};
 use serde_json::Value;
 
 /// The zh-TW system label the web app treats as "no label".
 const UNLABELED: &str = "\u{672a}\u{6a19}\u{7c64}";
+
+/// What `GetEditInfo` answers for a tsd id the trip does not hold: a 002
+/// with this message and a null payload, not the 001 a miss would suggest.
+const TSD_NOT_FOUND: &str = "TSD Id not found";
 
 /// Where `GetAddWhere` can put a new stop. A day's slots are `start`, one
 /// named after each stop EXCEPT the first, and `end`; an empty day has a
@@ -228,6 +232,73 @@ pub fn remove_stop(
             ("TravelScheduleUpdateTime", time.to_string()),
         ];
         let data = client.delete_form("TravelScheduleDetail/Delete", &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
+/// The whole edit sheet of one stop. `Update` wants every field back, so
+/// this is what the command merges its flags into.
+pub struct StopEdit {
+    pub name: String,
+    pub category_id: String,
+    pub stay_time: i64,
+    /// `None` means chicTrip computes the time.
+    pub arrival: Option<String>,
+    pub departure: Option<String>,
+}
+
+pub fn edit_info(
+    client: &Client,
+    trip_id: &str,
+    tsd_id: &str,
+    update_time: i64,
+) -> Result<EditInfo, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let envelope = client.get_envelope(
+            "TravelScheduleDetail/GetEditInfo",
+            &[
+                ("travelScheduleId", trip_id.to_string()),
+                ("tsdId", tsd_id.to_string()),
+                ("travelScheduleUpdateTime", time.to_string()),
+            ],
+        )?;
+        if envelope.message.as_deref() == Some(TSD_NOT_FOUND) {
+            return Err(AxiError::not_found(format!(
+                "stop {tsd_id} is not in trip {trip_id}"
+            )));
+        }
+        decode(envelope.into_data()?)
+    })
+}
+
+pub fn update_stop(
+    client: &Client,
+    trip_id: &str,
+    tsd_id: &str,
+    edit: &StopEdit,
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    let pinned = |time: &Option<String>| if time.is_some() { "1" } else { "0" }.to_string();
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("TsdId", tsd_id.to_string()),
+            ("Name", edit.name.clone()),
+            ("PoiClassificationId", edit.category_id.clone()),
+            ("StayTime", edit.stay_time.to_string()),
+            ("IsUseCustomArrivalTime", pinned(&edit.arrival)),
+            (
+                "CustomArrivalTime",
+                edit.arrival.clone().unwrap_or_default(),
+            ),
+            ("IsUseCustomDepartureTime", pinned(&edit.departure)),
+            (
+                "CustomDepartureTime",
+                edit.departure.clone().unwrap_or_default(),
+            ),
+            ("TravelScheduleId", trip_id.to_string()),
+            ("travelScheduleUpdateTime", time.to_string()),
+        ];
+        let data = client.put_form("TravelScheduleDetail/Update", &form)?;
         Ok(new_update_time(&data, time))
     })
 }

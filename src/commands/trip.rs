@@ -1,10 +1,13 @@
 //! `trip list`, `create`, `view`, `add`, `remove`, and `delete`.
 
-use super::{count, count_line, select_days, stops_table, trips_table, validate_limit, value};
+use super::{
+    MAX_STAY_MIN, count, count_line, select_days, stops_table, trips_table, validate_limit,
+    validate_minutes, value,
+};
 use crate::api::trips::{self, Position};
-use crate::api::types::{CreatedTrip, Day, TripDetail};
+use crate::api::types::{Category, CreatedTrip, Day, EditInfo, TripDetail};
 use crate::cli::{Context, TripCommand};
-use crate::datetime::Date;
+use crate::datetime::{Date, parse_clock};
 use crate::error::{AxiError, ErrorCode};
 use crate::output::{Document, Table, truncate};
 use serde_json::Value;
@@ -12,6 +15,8 @@ use serde_json::Value;
 const TRAFFIC_MODES: [&str; 5] = ["Custom", "Transit", "Driving", "Walk", "PublicTransport"];
 /// chicTrip's name for the slot in front of a day's first stop.
 const START_SLOT: &str = "start";
+/// The `categoryList` rows that make a stop a flight row.
+const TSD_CATEGORY: &str = "TsdCategory";
 const MAX_TRIP_DAYS: i64 = 60;
 
 pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
@@ -42,6 +47,26 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             position,
             after.as_deref(),
             *allow_duplicate,
+        ),
+        TripCommand::Edit {
+            trip_id,
+            stop,
+            stay,
+            arrive,
+            depart,
+            category,
+            name,
+        } => edit(
+            ctx,
+            trip_id,
+            stop,
+            &EditFlags {
+                stay: *stay,
+                arrive: arrive.as_deref(),
+                depart: depart.as_deref(),
+                category: category.as_deref(),
+                name: name.as_deref(),
+            },
         ),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
@@ -481,6 +506,250 @@ fn slots_for(
             Ok(same(id_at(index + 1)))
         }
     }
+}
+
+/// The `trip edit` flags as clap parsed them, before validation.
+struct EditFlags<'a> {
+    stay: Option<i64>,
+    arrive: Option<&'a str>,
+    depart: Option<&'a str>,
+    category: Option<&'a str>,
+    name: Option<&'a str>,
+}
+
+/// What the caller asked of one time field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TimeFlag {
+    Keep,
+    Auto,
+    At(String),
+}
+
+/// The validated request, with the category still an icon token because the
+/// id it maps to is only known once the live sheet is read.
+struct EditRequest {
+    stay: Option<i64>,
+    arrive: TimeFlag,
+    depart: TimeFlag,
+    category: Option<String>,
+    name: Option<String>,
+}
+
+fn parse_time_flag(flag: &str, text: Option<&str>) -> Result<TimeFlag, AxiError> {
+    match text {
+        None => Ok(TimeFlag::Keep),
+        Some(text) if text.eq_ignore_ascii_case("auto") => Ok(TimeFlag::Auto),
+        Some(text) => Ok(TimeFlag::At(parse_clock(flag, text)?)),
+    }
+}
+
+fn validate_edit(flags: &EditFlags) -> Result<EditRequest, AxiError> {
+    if flags.stay.is_none()
+        && flags.arrive.is_none()
+        && flags.depart.is_none()
+        && flags.category.is_none()
+        && flags.name.is_none()
+    {
+        return Err(AxiError::usage(
+            "nothing to change; pass at least one of --stay --arrive --depart --category --name",
+        ));
+    }
+    let stay = flags
+        .stay
+        .map(|value| validate_minutes("--stay", value, MAX_STAY_MIN))
+        .transpose()?;
+    let name = match flags.name {
+        Some(name) if name.trim().is_empty() => return Err(AxiError::usage("--name is empty")),
+        other => other.map(str::to_string),
+    };
+    let category = match flags.category {
+        Some(token) if token.trim().is_empty() => {
+            return Err(AxiError::usage("--category is empty"));
+        }
+        other => other.map(|token| token.trim().to_string()),
+    };
+    Ok(EditRequest {
+        stay,
+        arrive: parse_time_flag("--arrive", flags.arrive)?,
+        depart: parse_time_flag("--depart", flags.depart)?,
+        category,
+        name,
+    })
+}
+
+fn resolve_category(info: &EditInfo, token: &str) -> Result<Category, AxiError> {
+    info.category_list
+        .iter()
+        .find(|row| {
+            row.icon
+                .as_deref()
+                .is_some_and(|icon| icon.eq_ignore_ascii_case(token))
+        })
+        .cloned()
+        .ok_or_else(|| {
+            let icons: Vec<&str> = info
+                .category_list
+                .iter()
+                .filter_map(|row| row.icon.as_deref())
+                .collect();
+            AxiError::usage(format!(
+                "unknown --category '{token}'; valid categories: {}",
+                icons.join(",")
+            ))
+        })
+}
+
+fn pinned(in_use: bool, time: &Option<String>) -> Option<String> {
+    in_use.then(|| time.clone()).flatten()
+}
+
+fn merged_time(flag: &TimeFlag, current: &Option<String>) -> Option<String> {
+    match flag {
+        TimeFlag::Keep => current.clone(),
+        TimeFlag::Auto => None,
+        TimeFlag::At(time) => Some(time.clone()),
+    }
+}
+
+/// Folds the request into the sheet chicTrip answered with, and names every
+/// field that came out different. An empty list is the no-op.
+fn merge_edit(
+    info: &EditInfo,
+    request: &EditRequest,
+    category: Option<&Category>,
+) -> (trips::StopEdit, Vec<&'static str>) {
+    let current_name = info.name.clone().unwrap_or_default();
+    let current_category = info.poi_classification_id.clone().unwrap_or_default();
+    let current_stay = info.stay_time.unwrap_or(0);
+    let current_arrival = pinned(info.is_use_custom_arrival_time, &info.custom_arrival_time);
+    let current_departure = pinned(
+        info.is_use_custom_departure_time,
+        &info.custom_departure_time,
+    );
+
+    let edit = trips::StopEdit {
+        name: request.name.clone().unwrap_or_else(|| current_name.clone()),
+        category_id: category
+            .and_then(|row| row.id.clone())
+            .unwrap_or_else(|| current_category.clone()),
+        stay_time: request.stay.unwrap_or(current_stay),
+        arrival: merged_time(&request.arrive, &current_arrival),
+        departure: merged_time(&request.depart, &current_departure),
+    };
+
+    let mut changed = Vec::new();
+    if edit.name != current_name {
+        changed.push("name");
+    }
+    if edit.category_id != current_category {
+        changed.push("category");
+    }
+    if edit.stay_time != current_stay {
+        changed.push("stay_min");
+    }
+    if edit.arrival != current_arrival {
+        changed.push("arrive");
+    }
+    if edit.departure != current_departure {
+        changed.push("depart");
+    }
+    (edit, changed)
+}
+
+/// The stop as chicTrip now holds it, from the sheet alone.
+fn stop_object(info: &EditInfo, tsd_id: &str) -> Document {
+    let is_flight = info
+        .category_list
+        .iter()
+        .find(|row| row.icon == info.category_icon)
+        .and_then(|row| row.category_type.as_deref())
+        .is_some_and(|kind| kind == TSD_CATEGORY);
+
+    let mut stop = Document::new();
+    stop.set("tsd_id", tsd_id);
+    stop.set("name", value(&info.name));
+    stop.set("category", value(&info.category_icon));
+    stop.set("type", if is_flight { "flight" } else { "basic" });
+    let arrive_pinned = pinned(info.is_use_custom_arrival_time, &info.custom_arrival_time);
+    stop.set(
+        "arrive",
+        value(&arrive_pinned.clone().or_else(|| info.arrival_time.clone())),
+    );
+    if arrive_pinned.is_some() {
+        stop.set("arrive_custom", true);
+    }
+    let depart_pinned = pinned(
+        info.is_use_custom_departure_time,
+        &info.custom_departure_time,
+    );
+    stop.set(
+        "depart",
+        value(
+            &depart_pinned
+                .clone()
+                .or_else(|| info.departure_time.clone()),
+        ),
+    );
+    if depart_pinned.is_some() {
+        stop.set("depart_custom", true);
+    }
+    stop.set("stay_min", count(info.stay_time));
+    stop
+}
+
+fn edit(
+    ctx: &Context,
+    trip_id: &str,
+    tsd_id: &str,
+    flags: &EditFlags,
+) -> Result<Document, AxiError> {
+    let request = validate_edit(flags)?;
+
+    let client = ctx.member_client("trip edit")?;
+    let update_time = trips::current_update_time(&client, trip_id)?;
+    let info = trips::edit_info(&client, trip_id, tsd_id, update_time).map_err(|e| {
+        if e.code == ErrorCode::NotFound {
+            return e.with_help([format!(
+                "Run `chictrip-axi trip view {trip_id}` to list the stops and their tsd_id"
+            )]);
+        }
+        e
+    })?;
+    let category = request
+        .category
+        .as_deref()
+        .map(|token| resolve_category(&info, token))
+        .transpose()?;
+    let (edit, changed) = merge_edit(&info, &request, category.as_ref());
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    if changed.is_empty() {
+        doc.set_object("stop", stop_object(&info, tsd_id));
+        doc.set_primary("stop");
+        doc.set_strings("changed", &[] as &[String]);
+        doc.set("note", "already as requested (no-op)");
+        doc.set_strings("help", &edited_help(trip_id, tsd_id));
+        return Ok(doc);
+    }
+
+    let update_time = trips::update_stop(&client, trip_id, tsd_id, &edit, update_time)?;
+    let after = trips::edit_info(&client, trip_id, tsd_id, update_time)?;
+    doc.set_object("stop", stop_object(&after, tsd_id));
+    doc.set_primary("stop");
+    doc.set_strings("changed", &changed);
+    doc.set("update_time", update_time);
+    doc.set_strings("help", &edited_help(trip_id, tsd_id));
+    Ok(doc)
+}
+
+fn edited_help(trip_id: &str, tsd_id: &str) -> Vec<String> {
+    vec![
+        format!("Run `chictrip-axi trip view {trip_id} --full` to see every stop with its times"),
+        format!(
+            "Run `chictrip-axi trip note {trip_id} --stop {tsd_id} --set \"<text>\"` to attach a note"
+        ),
+    ]
 }
 
 fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, AxiError> {

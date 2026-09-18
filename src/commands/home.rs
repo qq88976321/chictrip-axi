@@ -33,6 +33,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "trip add <trip-id> --day N --poi ID...",
         "Add POIs to a day (skips duplicates)",
     ),
+    (
+        "trip edit <trip-id> --stop ID",
+        "Change a stop's stay or times or category or name",
+    ),
     ("trip remove <trip-id> --stop ID...", "Remove stops"),
     ("trip delete <trip-id>", "Delete a whole trip"),
     (
