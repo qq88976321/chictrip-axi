@@ -31,6 +31,7 @@ const EDIT_INFO_AFTER: &str = include_str!("fixtures/edit_info_after.json");
 const ROUTE_LIST_TRANSIT: &str = include_str!("fixtures/route_list_transit.json");
 const ROUTE_LIST_DRIVING: &str = include_str!("fixtures/route_list_driving.json");
 const ROUTE_LIST_CUSTOM: &str = include_str!("fixtures/route_list_custom.json");
+const DAY_TRAFFIC: &str = include_str!("fixtures/day_traffic.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -1348,6 +1349,113 @@ fn trip_leg_rejects_conflicting_setters_before_any_request() {
         assert_eq!(code, 2, "{args:?} {stdout}");
         assert!(stdout.starts_with("error: usage\n"), "{stdout}");
     }
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+#[test]
+fn trip_traffic_sets_the_day_default_and_prints_the_returned_day() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay" => Some(ok(DAY_TRAFFIC)),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("traffic");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "traffic", TRIP, "--day", "1", "--mode", "driving"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay")
+        .expect("the day default was written");
+    assert_eq!(write.method, "PUT");
+    assert_eq!(write.field("day").as_deref(), Some("1"));
+    assert_eq!(write.field("trafficType").as_deref(), Some("Driving"));
+    assert_eq!(write.field("isForceUpdateTsdRoute").as_deref(), Some("0"));
+    assert!(stdout.contains("\ntraffic: Driving\n"), "{stdout}");
+    assert!(
+        stdout.contains("stops[3]{seq,arrive,stay_min,name,tsd_id,traffic,traffic_min}:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("update_time: 1789710800"), "{stdout}");
+    assert_eq!(
+        server.paths(),
+        vec![
+            "/TravelScheduleDetail/VerifyUpdateTime",
+            "/TravelScheduleDetail/Get",
+            "/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay",
+        ],
+        "the answer carries the day, so there is no re-read"
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "traffic",
+            TRIP,
+            "--day",
+            "1",
+            "--mode",
+            "scooter",
+            "--recompute",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .rfind(|r| r.path == "/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay")
+        .expect("the day default was written");
+    assert_eq!(write.field("trafficType").as_deref(), Some("TwoWheeler"));
+    assert_eq!(write.field("isForceUpdateTsdRoute").as_deref(), Some("1"));
+}
+
+#[test]
+fn trip_traffic_with_the_mode_the_day_already_has_is_a_no_op() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("traffic-noop");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "traffic", TRIP, "--day", "1", "--mode", "transit"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("note: \"already Transit (no-op)\""),
+        "{stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay".to_string()),
+        "a no-op never writes"
+    );
+}
+
+#[test]
+fn trip_traffic_rejects_an_unknown_mode_before_any_request() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("traffic-usage");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "traffic", TRIP, "--day", "1", "--mode", "flight"],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(
+        stdout.contains("valid modes: custom,driving,transit,walking,scooter"),
+        "{stdout}"
+    );
     assert!(server.requests().is_empty(), "usage errors never call out");
 }
 

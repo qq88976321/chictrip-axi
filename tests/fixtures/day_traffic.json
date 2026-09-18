@@ -1,0 +1,45 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "travelScheduleUpdateTime": 1789710800,
+  "dayData": {
+   "day": 1,
+   "date": "2026/10/01",
+   "trafficType": "Driving",
+   "tsdList": [
+    {
+     "id": "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+     "name": "Azumabashi pier",
+     "tsdType": "basic",
+     "day": 1,
+     "arrivalTime": "09:00",
+     "stayTime": 60,
+     "arrivalTrafficType": "Custom",
+     "arrivalTrafficTime": 0
+    },
+    {
+     "id": "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+     "name": "Senso-ji",
+     "tsdType": "basic",
+     "day": 1,
+     "arrivalTime": "10:08",
+     "stayTime": 90,
+     "arrivalTrafficType": "Driving",
+     "arrivalTrafficTime": 8
+    },
+    {
+     "id": "d0000000-cccc-4ccc-8ccc-cccccccccccc",
+     "name": "Tokyo Skytree",
+     "tsdType": "basic",
+     "day": 1,
+     "arrivalTime": "11:50",
+     "stayTime": 45,
+     "arrivalTrafficType": "Driving",
+     "arrivalTrafficTime": 12
+    }
+   ]
+  }
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

@@ -321,6 +321,22 @@ A leg belongs to the stop it arrives at, so a day's first stop has none. --mode 
         #[arg(long, value_name = "TEXT", requires = "duration")]
         note: Option<String>,
     },
+    /// Set a day's default travel mode for every leg
+    #[command(after_help = "Examples:
+  chictrip-axi trip traffic <trip-id> --day 1 --mode transit
+  chictrip-axi trip traffic <trip-id> --day 2 --mode driving --recompute
+--recompute also re-routes legs that were picked or set by hand; without it only new legs pick the mode up. The same mode again is a no-op unless --recompute is given.")]
+    Traffic {
+        trip_id: String,
+        #[arg(long, value_name = "N")]
+        day: i64,
+        /// custom, driving, transit, walking, or scooter
+        #[arg(long, value_name = "MODE")]
+        mode: String,
+        /// Recompute every leg of the day, hand-set ones included
+        #[arg(long)]
+        recompute: bool,
+    },
     /// Remove stops by their tsd_id
     #[command(after_help = "Examples:
   chictrip-axi trip remove <trip-id> --stop <tsd-id>

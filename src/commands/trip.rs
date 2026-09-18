@@ -94,6 +94,12 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
                 note: note.as_deref(),
             },
         ),
+        TripCommand::Traffic {
+            trip_id,
+            day,
+            mode,
+            recompute,
+        } => traffic(ctx, trip_id, *day, mode, *recompute),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
     }
@@ -1110,6 +1116,92 @@ fn leg_after_write(
             format!(
                 "Run `chictrip-axi trip leg {trip_id} --stop {tsd_id}` to list the routes again"
             ),
+        ],
+    );
+    Ok(doc)
+}
+
+/// The modes a whole day can default to: the routable ones plus `custom`,
+/// which means "I will fill the legs in myself".
+fn day_mode(token: &str) -> Result<TrafficMode, AxiError> {
+    TrafficMode::from_token(token)
+        .filter(|mode| mode.is_routable() || *mode == TrafficMode::Custom)
+        .ok_or_else(|| {
+            let mut tokens = vec![TrafficMode::Custom.token()];
+            tokens.extend(TrafficMode::ROUTABLE.iter().map(|m| m.token()));
+            AxiError::usage(format!(
+                "unknown --mode '{token}'; valid modes: {}",
+                tokens.join(",")
+            ))
+        })
+}
+
+fn traffic(
+    ctx: &Context,
+    trip_id: &str,
+    day: i64,
+    mode: &str,
+    recompute: bool,
+) -> Result<Document, AxiError> {
+    if day < 1 {
+        return Err(AxiError::usage("--day starts at 1"));
+    }
+    let mode = day_mode(mode)?;
+
+    let client = ctx.member_client("trip traffic")?;
+    let update_time = trips::current_update_time(&client, trip_id)?;
+    let detail = trips::trip_detail(&client, trip_id, update_time)?;
+    let total_days = detail
+        .travel_schedule_info
+        .total_day
+        .unwrap_or(detail.day_list.len() as i64);
+    if day > total_days {
+        return Err(AxiError::not_found(format!(
+            "day {day} is outside this trip, which has {total_days} days"
+        )));
+    }
+    let current = detail.day_list.iter().find(|d| d.day == Some(day)).cloned();
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    doc.set("day", day);
+
+    let already = !recompute
+        && current
+            .as_ref()
+            .and_then(|d| d.traffic_type.as_deref())
+            .is_some_and(|kind| kind == mode.api());
+    let (shown, update_time) = if already {
+        (current.unwrap_or_default(), update_time)
+    } else {
+        let answer = trips::set_day_traffic(&client, trip_id, day, mode, recompute, update_time)?;
+        let new_time = answer.travel_schedule_update_time.unwrap_or(update_time);
+        (answer.day_data, new_time)
+    };
+
+    doc.set("traffic", value(&shown.traffic_type));
+    let mut table = stops_table(std::slice::from_ref(&shown), false, true);
+    table.select(&[
+        "seq".into(),
+        "arrive".into(),
+        "stay_min".into(),
+        "name".into(),
+        "tsd_id".into(),
+        "traffic".into(),
+        "traffic_min".into(),
+    ])?;
+    doc.set_table("stops", table);
+    doc.set_primary("stops");
+    if already {
+        doc.set("note", format!("already {} (no-op)", mode.api()));
+    } else {
+        doc.set("update_time", update_time);
+    }
+    doc.set_strings(
+        "help",
+        &[
+            format!("Run `chictrip-axi trip leg {trip_id} --stop <tsd_id>` to change one leg"),
+            format!("Run `chictrip-axi trip view {trip_id} --day {day} --full` for the whole day"),
         ],
     );
     Ok(doc)

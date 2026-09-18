@@ -3,8 +3,8 @@
 
 use super::Client;
 use super::types::{
-    AddWhereResult, AddedStop, EditInfo, Poi, RouteList, SystemCover, TripDetail, TripSummary,
-    UserLabel,
+    AddWhereResult, AddedStop, DayTraffic, EditInfo, Poi, RouteList, SystemCover, TripDetail,
+    TripSummary, UserLabel,
 };
 use crate::error::{AxiError, ErrorCode};
 use serde_json::Value;
@@ -476,6 +476,32 @@ pub fn set_custom_route(
         ];
         let data = client.put_form(path, &form)?;
         Ok(new_update_time(&data, time))
+    })
+}
+
+/// Sets a whole day's default mode. `recompute` also re-routes the legs that
+/// were picked or set by hand; without it only new legs pick the mode up.
+pub fn set_day_traffic(
+    client: &Client,
+    trip_id: &str,
+    day: i64,
+    mode: TrafficMode,
+    recompute: bool,
+    update_time: i64,
+) -> Result<DayTraffic, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("travelScheduleId", trip_id.to_string()),
+            ("day", day.to_string()),
+            ("trafficType", mode.api().to_string()),
+            ("travelScheduleUpdateTime", time.to_string()),
+            (
+                "isForceUpdateTsdRoute",
+                if recompute { "1" } else { "0" }.to_string(),
+            ),
+        ];
+        let data = client.put_form("TravelScheduleDetail/SetDefaultRouteAndTsdAllDay", &form)?;
+        decode(data)
     })
 }
 

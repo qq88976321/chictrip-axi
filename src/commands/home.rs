@@ -45,6 +45,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "trip leg <trip-id> --stop ID",
         "List or set how a stop is reached",
     ),
+    (
+        "trip traffic <trip-id> --day N --mode M",
+        "Set a day's default travel mode",
+    ),
     ("trip remove <trip-id> --stop ID...", "Remove stops"),
     ("trip delete <trip-id>", "Delete a whole trip"),
     (
