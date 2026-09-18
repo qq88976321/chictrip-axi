@@ -9,7 +9,7 @@ use clap::{Args, CommandFactory, Parser, Subcommand};
 use std::path::PathBuf;
 
 /// One sentence of what this AXI does; the home view and `--help` share it.
-pub const DESCRIPTION: &str = "Agent-first CLI for chicTrip: search places, read expert itineraries, build trips in your account";
+pub const DESCRIPTION: &str = "Agent-first CLI for chicTrip: search places, read expert itineraries, build and edit trips in your account";
 
 /// Every command accepts these, and they are never reported as unknown flags.
 pub const GLOBAL_FLAGS: [&str; 5] = ["--fields", "--help", "--json", "--timeout", "--token"];
@@ -49,7 +49,7 @@ pub enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
-    /// My trips: list, create, inspect, fill, and delete; preview any trip by id
+    /// My trips: list, create, inspect, fill, edit, and delete; preview any trip by id
     Trip {
         #[command(subcommand)]
         command: TripCommand,
@@ -59,7 +59,7 @@ pub enum Command {
         #[command(subcommand)]
         command: TourCommand,
     },
-    /// Places: search by keyword, read one in detail
+    /// Places: search by keyword, read one in detail, file one chicTrip does not list
     Poi {
         #[command(subcommand)]
         command: PoiCommand,

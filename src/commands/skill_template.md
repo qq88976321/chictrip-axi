@@ -1,6 +1,6 @@
 ---
 name: chictrip-axi
-description: Plan trips on chicTrip (chictrip.com.tw) from the shell with the chictrip-axi CLI. Use when asked to search places or destinations, read expert itineraries, or create, fill, and inspect trips in a chicTrip account.
+description: Plan trips on chicTrip (chictrip.com.tw) from the shell with the chictrip-axi CLI. Use when asked to search places or destinations, read expert itineraries, or create, fill, inspect, and refine trips in a chicTrip account: stop times and stays, notes, how to travel between stops, the order of a day, flights, and places chicTrip does not list.
 ---
 
 # chictrip-axi
@@ -23,12 +23,12 @@ The installer puts the binary in `~/.local/bin`. Run `chictrip-axi` with no argu
 - An empty result prints `count: 0` and an empty table like `pois[0]:`, never silence, and still exits 0.
 - Errors are a document on stdout, not stderr: `error: <code>`, `message`, `help[]` with the command that fixes it, and `flags[]` on a usage error. Codes are stable: usage, auth_required, auth_invalid, not_found, forbidden, conflict, api_error, network, internal.
 - Exit codes: 0 success (no-ops included), 1 error, 2 usage error.
-- Ids are UUIDs; pass them back verbatim. Mutations are idempotent: `trip create` with the same name and dates returns the existing trip, `trip add` skips POIs already in the day, `trip remove` skips a stop that is not there, and `trip delete` on a missing trip succeeds.
+- Ids are UUIDs; pass them back verbatim. Mutations are idempotent: `trip create` with the same name and dates returns the existing trip, `trip add` skips POIs already in the day, `trip remove` skips a stop that is not there, `trip delete` on a missing trip succeeds, and `trip edit`, `trip note`, `trip leg`, `trip traffic`, and `trip move` write nothing when the trip already matches the request (they say `no-op`). The exception is `poi create`: a private place cannot be found again, so every run files another one and chicTrip cannot delete it.
 - Nothing prompts; every command is safe to run unattended.
 
 ## Auth
 
-Read commands work with the built-in guest token. `trip *` (except `trip preview`) and `tour copy` need a member token. chicTrip has no password login, so log in at https://www.chictrip.com.tw/ and run this in the browser console:
+Read commands work with the built-in guest token. `trip *` (except `trip preview`), `tour copy`, and `poi create` need a member token. chicTrip has no password login, so log in at https://www.chictrip.com.tw/ and run this in the browser console:
 
 ```js
 copy(JSON.stringify({accessToken:localStorage.accessToken,refreshToken:localStorage.refreshToken,memberId:localStorage.memberId}))
@@ -54,3 +54,12 @@ Reference an expert itinerary or somebody else's trip:
 
 - `chictrip-axi tour list`, then `chictrip-axi tour view <tour-id> --day 1`; `chictrip-axi tour copy <tour-id>` copies it into my trips (chicTrip allows several copies, so this one is not idempotent)
 - `chictrip-axi trip preview <trip-id>` reads any trip by id, shared or not, without owning it
+
+Refine a day:
+
+1. `chictrip-axi trip view <trip-id> --day 1 --full` shows each stop's `tsd_id`, arrival, stay, category, note, and leg
+2. `chictrip-axi trip edit <trip-id> --stop <tsd-id> --arrive 10:30 --stay 90` pins the arrival and the stay; `--arrive auto` lets chicTrip compute it again; `--category takeOff` or `--category landing` turns a stop into a flight row
+3. `chictrip-axi trip note <trip-id> --stop <tsd-id> --set "book ahead"` writes a note on a stop; without `--stop` it is the trip note (chicTrip has no per-day note)
+4. `chictrip-axi trip leg <trip-id> --stop <tsd-id>` lists how to reach that stop; `--route <route_id>` picks one, `--custom 25 --note "taxi"` or `--flight 180 --note "BR198 TPE-NRT"` writes a free-form leg. A leg belongs to the stop you arrive at, so a day's first stop has none; `chictrip-axi trip traffic <trip-id> --day 1 --mode transit` sets the whole day's default
+5. `chictrip-axi trip move <trip-id> --stop <tsd-id> --position first` reorders the day; `--day 2 --position last` moves the stop into another day, keeping its id and its note
+6. `chictrip-axi poi create --name "Our ryokan" --at 35.0116,135.7681 --category moon` files a place chicTrip does not list; use its id with `trip add`
