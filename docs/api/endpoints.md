@@ -7,7 +7,7 @@ Auth column: `guest` = works with the anonymous guest JWT, `member` =
 replies `002 Reject Guest Member`, `token` = works for guest but returns
 the guest member's own data, `apikey` = needs the SEO ApiKey header, `?` =
 not verified. Params are query-string names for GET, form fields
-otherwise. Rows marked `(bundle)` in the Params column were read from the web app's request builders, not exercised live (this session had no member token); the rest of the marked rows were exercised live.
+otherwise. Rows marked `(bundle)` in the Params column were read from the web app's request builders and not exercised; rows marked `(live)` were exercised with the guest token on 2026-09-18 or with a member token on 2026-09-18 and 2026-09-19 (test account).
 
 ## Advertise (1)
 
@@ -147,7 +147,7 @@ otherwise. Rows marked `(bundle)` in the Params column were read from the web ap
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| POST | `/Poi/AddCustomPoiForWeb` |  |  |  |
+| POST | `/Poi/AddCustomPoiForWeb` | member | name, categoryId, longitude, latitude, address, description (urlencoded, no media; live) | files a private place: returns the full POI with authority=private and createMode=custom; not searchable afterwards and there is no delete endpoint; the web app sends multipart but urlencoded is accepted |
 | POST | `/Poi/Favorite/Post` |  |  |  |
 | GET | `/Poi/GetPoiById` | guest | id | full POI, 163 KB (media, advertises, poiTickets) |
 | GET | `/Poi/GetPoisByPoiNearBy` | guest | poiId | 12 full POIs, 248 KB |
@@ -158,8 +158,8 @@ otherwise. Rows marked `(bundle)` in the Params column were read from the web ap
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| GET | `/PoiClassification/GetAll` | member | page | guest -> 002 Reject Guest Member |
-| GET | `/PoiClassification/GetCustomPoiCategory` | member | - | guest -> 002 |
+| GET | `/PoiClassification/GetAll` | member | page (live) | {page, list[], hasNextPage}; 15 rows on page 1: the 7 custom-POI icons plus chargingPoint, other, heart, parking, pin and three type=Tag rows, so not the vocabulary AddCustomPoiForWeb wants; guest -> 002 Reject Guest Member |
+| GET | `/PoiClassification/GetCustomPoiCategory` | member | - (live) | 7 rows {id, name, icon}: enterTainment, food, shop, moon, rentCar, train, plane; the categoryId vocabulary for AddCustomPoiForWeb; guest -> 002 |
 | GET | `/PoiClassification/GetMember` | guest | - | 7 categories: id, name, icon, type |
 | PUT | `/PoiClassification/UpdateMember` |  |  |  |
 
@@ -208,22 +208,22 @@ otherwise. Rows marked `(bundle)` in the Params column were read from the web ap
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| POST | `/TravelSchedule/AddV2` | member | CoverMediaId, Name, StartDate, EndDate, TotalDay, ViewMode=DetailMode, TravelScheduleUserLabelId, id="", TrafficType, IsForceUpdateTsdRoute=0, updateTime=0, destinationList[], LocationKey[] (urlencoded; bundle) | returns {id, name, updateTime, permission} |
+| POST | `/TravelSchedule/AddV2` | member | CoverMediaId, Name, StartDate, EndDate, TotalDay, ViewMode=DetailMode, TravelScheduleUserLabelId, id="", TrafficType, IsForceUpdateTsdRoute=0, updateTime=0, LocationKey[] (urlencoded; live) | returns {id, name, updateTime, permission}; an empty CoverMediaId, label id, or LocationKey[] -> the generic 002 |
 | POST | `/TravelSchedule/Copy` |  |  |  |
-| DELETE | `/TravelSchedule/Delete` | member | id (form; bundle) | whole trip; the bundle writes the path without a leading slash |
-| DELETE | `/TravelSchedule/DeleteDay` | member | id, DeleteDay, StartDate, EndDate, TotalDay, UpdateTime (bundle) |  |
-| PUT | `/TravelSchedule/SortDay` | member | (bundle: not traced) | reorder days; path has no leading slash in the bundle |
-| PUT | `/TravelSchedule/UpdateStartDate` | member | Id, StartDate, EndDate, updateTime (bundle) | the app uses it to add a day; no leading slash in the bundle |
+| DELETE | `/TravelSchedule/Delete` | member | id (form; live) | whole trip; deleting one that is already gone also answers 001 true; the bundle writes the path without a leading slash |
+| DELETE | `/TravelSchedule/DeleteDay` | member | id, DeleteDay, StartDate, EndDate, TotalDay, UpdateTime (form; live) | removes one day; returns the new updateTime; not used by the CLI |
+| PUT | `/TravelSchedule/SortDay` | member | id, dayList[] (the current day numbers in the new order), updateTime (urlencoded; live) | reorders days; returns the new updateTime; path has no leading slash in the bundle; not used by the CLI |
+| PUT | `/TravelSchedule/UpdateStartDate` | member | Id, StartDate, EndDate, updateTime (urlencoded; live) | moves or extends the date span; the app uses it to add a day; returns the new updateTime; no leading slash in the bundle; not used by the CLI |
 | GET | `/TravelSchedule/Get` |  |  |  |
 | GET | `/TravelSchedule/GetCollaboration` |  |  |  |
 | GET | `/TravelSchedule/GetCollaborationWithDetail` |  |  |  |
 | GET | `/TravelSchedule/GetMyAndCollaboration` | token | updateTime=0, orderByColumn=updatetime, sort=desc | my trips + collaborations (live for guest demo data) |
 | GET | `/TravelSchedule/GetMyAndCollaborationWithTsdCount` | token | - | guest sees 2 demo schedules |
-| GET | `/TravelSchedule/GetNote` |  |  |  |
+| GET | `/TravelSchedule/GetNote` | member | id, updateTime (live) | data is the trip note as a bare string ("" when unset); TravelScheduleDetail/Get carries the same text, so the CLI does not call this |
 | GET | `/TravelSchedule/GetSystemCoverList` | member | - | guest -> 002 |
 | GET | `/TravelSchedule/GetUpdateTravelScheduleInfo` |  |  |  |
 | GET | `/TravelSchedule/GetWithDetail` |  |  |  |
-| PUT | `/TravelSchedule/UpdateNote` |  |  |  |
+| PUT | `/TravelSchedule/UpdateNote` | member | id, note, updateTime (urlencoded; live) | returns the new updateTime; an empty note clears it; Preview keeps answering note "" |
 | PUT | `/TravelSchedule/UpdateV3` | member | same shape as AddV2 plus id and updateTime (urlencoded; bundle) |  |
 
 ## TravelScheduleCollaboration (7)
@@ -242,37 +242,37 @@ otherwise. Rows marked `(bundle)` in the Params column were read from the web ap
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| POST | `/TravelScheduleDetail/Add` | member | TravelScheduleId, Day, PoiId, AddWhereId, TravelScheduleUpdateTime, TsdCoverMediaId, TsdName (multipart; bundle) | returns {travelScheduleUpdateTime} |
+| POST | `/TravelScheduleDetail/Add` | member | TravelScheduleId, Day, PoiId, AddWhereId, TravelScheduleUpdateTime, TsdCoverMediaId, TsdName (urlencoded; live) | returns {tsdInfo, travelScheduleUpdateTime}; AddWhereId is start, end, or the id of the stop to insert IN FRONT OF (an empty day has one slot named first); an empty TsdCoverMediaId -> the generic 002 |
 | POST | `/TravelScheduleDetail/AddByFavoritePoi` |  |  |  |
-| POST | `/TravelScheduleDetail/Copy` |  |  |  |
-| DELETE | `/TravelScheduleDetail/Delete` | member | TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime (body on DELETE; bundle) | returns the new updateTime |
+| POST | `/TravelScheduleDetail/Copy` | member | TravelScheduleId, CopyDay, CopyTsdId, StayTime, ArrivalTrafficType, TravelScheduleUpdateTime (form; live) | copies a stop into day CopyDay: {tsdInfo, travelScheduleUpdateTime}; new tsd id, no leg; StayTime 45 came back 60; Sort moves a stop across days without copying |
+| DELETE | `/TravelScheduleDetail/Delete` | member | TravelScheduleId, Day, TsdId, TravelScheduleUpdateTime (form body on DELETE; live) | returns the new updateTime |
 | GET | `/TravelScheduleDetail/Get` | token | travelScheduleId, TravelScheduleUpdateTime, isMyTravelSchedule | {travelScheduleInfo, dayList[].tsdList[]}; guest on a shared trip -> 006 (live) |
 | GET | `/TravelScheduleDetail/Preview` | guest | TravelScheduleId | preview of ANY trip by id, shared or not (live, an unshared own trip included): {travelScheduleInfo, dayList}; unknown or deleted id -> 011 `TravelSchedule has been deleted`; missing or malformed id -> 002 non-empty body; no leading slash in the bundle |
 | GET | `/TravelScheduleDetail/GetAddWhere` | member | poiId, travelScheduleId, travelScheduleUpdateTime=0 (bundle) | dayList[].addWhereList[] insertion slots: addWhereId, arrival/departure tsd names, isBestOfDay, isBestOfAll |
 | GET | `/TravelScheduleDetail/GetAddWhereBestAll` |  |  |  |
 | GET | `/TravelScheduleDetail/GetDetail` |  |  |  |
-| GET | `/TravelScheduleDetail/GetEditInfo` |  |  |  |
-| GET | `/TravelScheduleDetail/GetNote` |  |  |  |
+| GET | `/TravelScheduleDetail/GetEditInfo` | member | travelScheduleId, tsdId, travelScheduleUpdateTime (must be CURRENT, 0 -> 004) (live) | the edit sheet: {id, name, address, categoryIcon, poiClassificationId, arrivalTime, stayTime, departureTime, isUseCustomArrivalTime, customArrivalTime, isUseCustomDepartureTime, customDepartureTime, categoryList[]}; categoryList = 9 Category + 3 TsdCategory rows; an unknown tsdId -> 002 "TSD Id not found" with a null payload |
+| GET | `/TravelScheduleDetail/GetNote` | member | tsdId, travelScheduleId, travelScheduleUpdateTime (live) | data is the stop note as a bare string; the tsd rows of Get carry it too |
 | GET | `/TravelScheduleDetail/GetPreviewSettingByDay` |  |  |  |
-| GET | `/TravelScheduleDetail/PreviewBestSortByDayV2` |  |  |  |
-| PUT | `/TravelScheduleDetail/SaveBestSortByDayV2` |  |  |  |
+| GET | `/TravelScheduleDetail/PreviewBestSortByDayV2` | member | travelScheduleId, day, startTsdId, endTsdId, firstArrivalTime, travelScheduleUpdateTime (bundle; live -> 002 below 4 stops) | needs 4 to 40 stops in the day (travelScheduleInfo.bestSortTsdLimitCount); not used by the CLI |
+| PUT | `/TravelScheduleDetail/SaveBestSortByDayV2` | member | JSON {TravelScheduleId, Day, TravelScheduleUpdateTime, RecommendResult, ChooseResult, BestSortTsdList[]} (bundle; not cracked) | the one JSON body in the app; same 4 to 40 limit; not used by the CLI |
 | PUT | `/TravelScheduleDetail/SetCover` |  |  |  |
-| PUT | `/TravelScheduleDetail/SetCustomRoute` |  |  |  |
-| PUT | `/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay` |  |  |  |
-| PUT | `/TravelScheduleDetail/SetFlightRoute` |  |  |  |
-| PUT | `/TravelScheduleDetail/SetRoute` |  |  |  |
-| PUT | `/TravelScheduleDetail/Sort` | member | TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[], travelScheduleUpdateTime (bundle) |  |
-| PUT | `/TravelScheduleDetail/Update` |  |  |  |
-| PUT | `/TravelScheduleDetail/UpdateNote` |  |  |  |
+| PUT | `/TravelScheduleDetail/SetCustomRoute` | member | TsdRouteDetailId, Duration (min), Note, TravelScheduleId, travelScheduleUpdateTime (urlencoded; live) | free-form leg INTO the stop that owns TsdRouteDetailId (arrivalTrafficType Custom); returns the new updateTime |
+| PUT | `/TravelScheduleDetail/SetDefaultRouteAndTsdAllDay` | member | travelScheduleId, day, trafficType, travelScheduleUpdateTime, isForceUpdateTsdRoute 0/1 (urlencoded; live) | a day's default mode; answers {travelScheduleUpdateTime, dayData}; 0 keeps existing legs, 1 recomputes every leg of the day |
+| PUT | `/TravelScheduleDetail/SetFlightRoute` | member | TsdRouteDetailId, Duration (min), Note, TravelScheduleId, travelScheduleUpdateTime (urlencoded; live) | the leg shows as Flight with the note, e.g. "BR198 TPE-NRT"; returns the new updateTime |
+| PUT | `/TravelScheduleDetail/SetRoute` | member | TsdRouteDetailId, PoiRouteDetailId, TravelScheduleId, travelScheduleUpdateTime (urlencoded; live) | picks one row of GetRouteList; returns the new updateTime |
+| PUT | `/TravelScheduleDetail/Sort` | member | TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[], travelScheduleUpdateTime (urlencoded; live) | TsdIdList[] is the whole TARGET day in its new order; MoveOutDay != MoveInDay moves the stop across days and it keeps its id, note and stay |
+| PUT | `/TravelScheduleDetail/Update` | member | TsdId, Name, PoiClassificationId, StayTime, IsUseCustomArrivalTime 0/1, CustomArrivalTime HH:MM, IsUseCustomDepartureTime 0/1, CustomDepartureTime HH:MM, TravelScheduleId, travelScheduleUpdateTime (urlencoded; live) | send the whole GetEditInfo sheet back; a TsdCategory id makes tsdType=flight; an empty custom time with its flag at 0 is accepted; a JSON body -> the generic 002 |
+| PUT | `/TravelScheduleDetail/UpdateNote` | member | TravelScheduleId, TsdId, Note, TravelScheduleUpdateTime (urlencoded; live) | returns the new updateTime; an empty Note clears it |
 | GET | `/TravelScheduleDetail/VerifyUpdateTime` | guest | TravelScheduleId, travelScheduleUpdateTime | 001 or 004; data.updateTime is the current value (live) |
 
 ## TravelScheduleDetailRoute (3)
 
 | Method | Path | Auth | Params (verified) | Notes |
 |---|---|---|---|---|
-| GET | `/TravelScheduleDetailRoute/GetFormulaTrafficTime` |  |  |  |
-| GET | `/TravelScheduleDetailRoute/GetRouteDetail` |  |  |  |
-| GET | `/TravelScheduleDetailRoute/GetRouteList` |  |  |  |
+| GET | `/TravelScheduleDetailRoute/GetFormulaTrafficTime` | member | departureLat, departureLon, arrivalLat, arrivalLon (live) | {walkingMinute, drivingMinute, transitMinute}; no trip involved; not used by the CLI |
+| GET | `/TravelScheduleDetailRoute/GetRouteDetail` | member | poiRouteDetailId, travelScheduleId, TravelScheduleUpdateTime (bundle) | 002 "PoiRouteDetail no found" for a tsdRouteDetailId; takes a poiRouteDetailId from GetRouteList; not used by the CLI |
+| GET | `/TravelScheduleDetailRoute/GetRouteList` | member | tsdRouteDetailId, trafficType (Driving/Transit/Walking/TwoWheeler/Custom/Flight; required, "" -> 002), travelScheduleId, TravelScheduleUpdateTime (live) | {tsdRouteList[{poiRouteDetailId, distance m, duration min, summary, isSelected}], tsdRouteTransitList[.. fare{currency,value}, lineList[]], tsdCustomRoute{duration, note, trafficType}, tsdRouteSearchSetting}; both lists are null rather than [] when empty |
 
 ## TravelScheduleShare (3)
 

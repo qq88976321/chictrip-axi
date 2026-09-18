@@ -77,6 +77,14 @@ Send every parameter the SPA sends, even if empty:
 - `Location/SearchV2` and `TravelSchedule/GetWithDetail` were not
   cracked; `ExpertTour/SearchLocation?keyword=` and
   `ExpertTour/TourV2?travelScheduleId=` cover the same needs.
+- A JSON body on a form endpoint gets the same message. Every `PUT`,
+  `POST`, and `DELETE` under `TravelSchedule*` and `Poi` binds
+  `application/x-www-form-urlencoded` (or multipart); a JSON body is
+  "empty" to it. So `002 A non-empty request body is required` never
+  means "send JSON" and never names a field: check the encoding first,
+  then each required field, then each field that must be non-empty
+  (verified 2026-09-19 on `TravelScheduleDetail/Update`, and on
+  `TravelScheduleDetail/Add` with an empty `TsdCoverMediaId`).
 
 ## Authentication
 
@@ -259,10 +267,14 @@ described under "Expert tour detail" (`id`, `name`, `tsdType`, `poiId`,
 ## Write flows (from the web app's request builders)
 
 Recovered from `TravelScheduleSettings.*.js`, `GlobalComponents.*.js`,
-and `home.*.js`; not exercised live in the exploration session (no
-member token). Field names are PascalCase or camelCase exactly as the
-app sends them; the server appears to bind case-insensitively but the
-app's spelling is the safe choice.
+and `home.*.js` on 2026-09-18, then exercised live with a member
+token: create, add, and delete on 2026-09-18; edit, notes, legs,
+reorder, copy, and custom places on 2026-09-19 (test account, probe
+trip `axi-probe-m4`). Field names are PascalCase or camelCase exactly
+as the app sends them; the server binds case-insensitively but the
+app's spelling is the safe choice. Every `PUT` below takes
+`application/x-www-form-urlencoded`, and the response `data` is the
+trip's new `updateTime` as a bare integer unless noted.
 
 ### Optimistic locking with updateTime
 
@@ -348,14 +360,20 @@ TsdName=<poi.name>
    `tsd` row, including the `id` that `Delete` takes, and
    `data.travelScheduleUpdateTime` is the trip's new update time.
    `addWhereId` is the literal `start` before the day's first stop and
-   `end` after its last one; the slots in between carry the id of the
-   stop they follow. A day with no stops has both `start` and `end`.
+   `end` after its last one; every other slot carries the id of the
+   stop the new one is inserted IN FRONT OF. So a day with three stops
+   answers `start`, the SECOND stop's id, the THIRD stop's id, `end`:
+   there is no slot named after the first stop, because `start` is
+   that slot. A day with no stops answers a single slot named `first`.
+   (An earlier revision of this file said the slot carries the id of
+   the stop it follows; corrected live on 2026-09-19 by adding a stop
+   with the second stop's id as `AddWhereId` and finding it in second
+   place.)
 
 Related: `POST TravelScheduleDetail/AddByFavoritePoi` adds from a
-favorites playlist; `POST TravelScheduleDetail/Copy`
-(`{TravelScheduleId, Day, CopyTsdId, StayTime, ArrivalTrafficType,
-TravelScheduleUpdateTime}`) plus `Delete` is how the app moves a stop
-across days.
+favorites playlist; `POST TravelScheduleDetail/Copy` (see "Copy a stop
+into another day" below) plus `Delete` is how the app moves a stop
+across days, though `Sort` moves one across days on its own.
 
 ### Remove a stop: `DELETE TravelScheduleDetail/Delete`
 
@@ -364,10 +382,199 @@ Body (the app sends a form body on DELETE):
 `data` is the new update time as a bare number (verified live
 2026-09-18).
 
+### Edit a stop: `GET TravelScheduleDetail/GetEditInfo` + `PUT TravelScheduleDetail/Update`
+
+The app opens the edit sheet with
+
+```
+GET TravelScheduleDetail/GetEditInfo?travelScheduleId=<trip>&tsdId=<tsd>&travelScheduleUpdateTime=<CURRENT>
+```
+
+`travelScheduleUpdateTime` must be the trip's current value: `0`,
+which `GetAddWhere` and `VerifyUpdateTime` accept, answers `004` here.
+`data`:
+
+```
+id, name, sort, address,
+categoryId, categoryName, categoryIcon, poiClassificationId,
+arrivalTime (computed), stayTime (minutes), departureTime (computed),
+isUseCustomArrivalTime, customArrivalTime (HH:MM or null),
+isUseCustomDepartureTime, customDepartureTime (HH:MM or null),
+categoryList[{id, name, icon, type}]
+```
+
+The row keeps the computed `arrivalTime` and the pinned
+`customArrivalTime` as separate fields; `isUseCustomArrivalTime` says
+which one the app shows (same for departure). `categoryList` has
+twelve rows: nine `type: Category` (icons `enterTainment`, `food`,
+`shop`, `moon`, `rentCar`, `train`, `plane`, `chargingPoint`, `other`)
+and three `type: TsdCategory` (`takeOff`, `transfer`, `landing`).
+Their ids are the vocabulary for `PoiClassificationId` below. An
+unknown `tsdId` answers `002` with the message `TSD Id not found` and
+a null payload (verified live 2026-09-19), not a 001 with no data.
+
+The save is `PUT TravelScheduleDetail/Update`,
+`application/x-www-form-urlencoded`, every field present (the app
+sends the whole sheet back, edited or not):
+
+```
+TsdId=<tsd>
+Name=<text>
+PoiClassificationId=<id from categoryList>
+StayTime=<minutes>
+IsUseCustomArrivalTime=0|1
+CustomArrivalTime=HH:MM          (empty when 0)
+IsUseCustomDepartureTime=0|1
+CustomDepartureTime=HH:MM        (empty when 0)
+TravelScheduleId=<trip>
+travelScheduleUpdateTime=<current>
+```
+
+Verified live 2026-09-19 on the probe trip: a stop pinned to a 10:30
+arrival with a 90 minute stay and released again with flag `0` plus an
+empty time, a stop relabelled `takeOff`, and a hotel row given a
+pinned 15:00 arrival and 09:00 departure. A `TsdCategory` id as
+`PoiClassificationId` turns the row into `tsdType: flight`, and a
+`Category` id turns it back. The row's `flightNumber`, `terminal`, and
+flight date fields are never written by the web app: flight details
+live in the stop name and in the leg note (`SetFlightRoute`). A JSON
+body answers `002 A non-empty request body is required` exactly like a
+missing field.
+
+### Stop and trip notes
+
+Two levels; the app has no per-day note.
+
+- Stop: `GET TravelScheduleDetail/GetNote?tsdId=&travelScheduleId=&travelScheduleUpdateTime=`
+  answers the note as a bare string in `data` (`""` when unset);
+  `PUT TravelScheduleDetail/UpdateNote` with `TravelScheduleId, TsdId,
+  Note, TravelScheduleUpdateTime` writes it. An empty `Note` clears it.
+- Trip: `GET TravelSchedule/GetNote?id=&updateTime=` and
+  `PUT TravelSchedule/UpdateNote` with `id, note, updateTime`.
+
+The `tsd` rows of `TravelScheduleDetail/Get` carry the full `note` and
+`isHasNote`, and `travelScheduleInfo.note` is the trip note, so
+reading a whole trip needs no `GetNote` at all. A POI stop starts with
+the POI's description as its note. `Preview` answers `note: ""` for
+the trip header and was observed a few seconds stale right after a
+write, so only `Get` (owner) is a read-back oracle. Verified live
+2026-09-19.
+
+### Legs: how a stop is reached
+
+A leg belongs to the stop it ARRIVES at. Each `tsd` row carries a
+`tsdRouteDetailId`; the first stop of a day has `null` there and no
+leg. The row shows the outcome as `arrivalTrafficType` and
+`arrivalTrafficTime` (minutes).
+
+```
+GET TravelScheduleDetailRoute/GetRouteList?tsdRouteDetailId=<id>&trafficType=<T>&travelScheduleId=<trip>&TravelScheduleUpdateTime=<current>
+```
+
+`trafficType` is required (`""` is the generic 002): `Driving`,
+`Transit`, `Walking`, `TwoWheeler`, `Custom`, or `Flight`. `data`:
+
+```
+tsdRouteDetailId
+tsdRouteList[{poiRouteDetailId, distance (m), duration (min), summary, isSelected}]   (google)
+tsdRouteTransitList[{poiRouteDetailId, distance, duration, fare{currency, value}, lineList[]}]  (jorudan)
+tsdCustomRoute{duration, note, trafficType}
+tsdRouteSearchSetting{provider, ...}
+```
+
+Both lists are `null`, not `[]`, when the requested mode has no
+candidates, and the transit rows carry no `summary` and no
+`isSelected`. `tsdCustomRoute` echoes the requested `trafficType` with
+a null `duration` when the leg is not of that type.
+
+Writes, all `PUT`, all urlencoded, all answering the new `updateTime`:
+
+- `TravelScheduleDetail/SetRoute`: `TsdRouteDetailId,
+  PoiRouteDetailId, TravelScheduleId, travelScheduleUpdateTime` picks
+  one row of a list.
+- `TravelScheduleDetail/SetCustomRoute`: `TsdRouteDetailId, Duration
+  (minutes), Note, TravelScheduleId, travelScheduleUpdateTime` writes
+  a free-form leg (`arrivalTrafficType: Custom`).
+- `TravelScheduleDetail/SetFlightRoute`: the same fields; the leg
+  shows as `Flight` with the note (the probe trip carries
+  `BR198 TPE-NRT`).
+- `TravelScheduleDetail/SetDefaultRouteAndTsdAllDay`:
+  `travelScheduleId, day, trafficType, travelScheduleUpdateTime,
+  isForceUpdateTsdRoute 0|1` sets the day's default mode
+  (`dayList[].trafficType`); with `0` existing legs keep their type
+  and only legs computed afterwards pick the mode up, with `1` every
+  leg of the day is recomputed. `data` is
+  `{travelScheduleUpdateTime, dayData{day, date, trafficType,
+  tsdList}}`, so a client needs no re-read.
+- `GET TravelScheduleDetailRoute/GetFormulaTrafficTime?departureLat=&departureLon=&arrivalLat=&arrivalLon=`
+  answers `{walkingMinute, drivingMinute, transitMinute}` for two
+  points, with no trip involved.
+
+The ownership rule matters for clients: to change how you get TO stop
+B, send B's `tsdRouteDetailId`, not A's. Verified live 2026-09-19:
+Tokyo Station reached by `Driving` in 21 minutes (SetRoute), a hotel
+by a 180 minute `Flight` leg (SetFlightRoute), and a scratch stop by a
+25 minute `Custom` leg with a note (SetCustomRoute).
+
 ### Reorder a day: `PUT TravelScheduleDetail/Sort`
 
-`TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[]
-(the day's tsd ids in the new order), travelScheduleUpdateTime`.
+`TravelScheduleId, MoveOutDay, MoveInDay, MoveTsdId, TsdIdList[],
+travelScheduleUpdateTime` (urlencoded). `TsdIdList[]` is the whole
+TARGET day in its new order, the moved stop included. Verified live
+2026-09-19 within one day, and across days: `MoveOutDay=2,
+MoveInDay=4` with the target day's list moved the stop to day 4 and it
+kept its id, its note, and its stay, so `Copy` plus `Delete` is not
+needed for a move.
+
+Day-level operations the CLI does not use, all verified live
+2026-09-19 and all answering the new `updateTime`: `PUT
+TravelSchedule/SortDay` (`id, dayList[]` = the current day numbers in
+the new order, `updateTime`), `PUT TravelSchedule/UpdateStartDate`
+(`Id, StartDate, EndDate, updateTime`; the app's "add a day"), and
+`DELETE TravelSchedule/DeleteDay` (`id, DeleteDay, StartDate,
+EndDate, TotalDay, UpdateTime`).
+
+### Copy a stop into another day: `POST TravelScheduleDetail/Copy`
+
+`TravelScheduleId, CopyDay, CopyTsdId, StayTime, ArrivalTrafficType,
+TravelScheduleUpdateTime` (form). The day field is `CopyDay`; an
+earlier revision of this file said `Day`. `data` is `{tsdInfo,
+travelScheduleUpdateTime}`: the copy is a new row with a new id and no
+leg, its note is the POI's, and `StayTime=45` came back as 60.
+Verified live 2026-09-19.
+
+### A place chicTrip does not know: `POST Poi/AddCustomPoiForWeb`
+
+Text fields only: `name, categoryId, longitude, latitude, address,
+description`. The web app sends `multipart/form-data` with a media
+part, but neither is required: `application/x-www-form-urlencoded`
+with no media answered `001` on 2026-09-19, so this endpoint needs no
+special transport. `categoryId` comes from `GET
+PoiClassification/GetCustomPoiCategory` (member): seven rows
+`{id, name, icon}` with icons `enterTainment`, `food`, `shop`, `moon`,
+`rentCar`, `train`, `plane`. `PoiClassification/GetAll?page=1` answers
+`{page, list[], hasNextPage}` with fifteen rows instead: the same
+seven plus `chargingPoint`, `other`, `heart`, `parking`, `pin`, and
+three `type: Tag` rows, so it is the wrong list for this form.
+
+`data` is the full POI object with `authority: private` and
+`createMode: custom`; `TravelScheduleDetail/Add` accepts its id like
+any other and the description becomes the stop's note. Private places
+do not appear in `PoiSearch/SearchByKeyword` and there is no delete
+endpoint, so every call files a permanent row.
+
+### Best sort (not used): `PreviewBestSortByDayV2` and `SaveBestSortByDayV2`
+
+`GET TravelScheduleDetail/PreviewBestSortByDayV2` (`travelScheduleId,
+day, startTsdId, endTsdId, firstArrivalTime,
+travelScheduleUpdateTime`) answers a `002` whose message says the stop
+count is outside the limit below
+`travelScheduleInfo.bestSortTsdLimitCount` (`{minCount: 4, maxCount:
+40}`); `PUT TravelScheduleDetail/SaveBestSortByDayV2` is the one JSON
+body in the app (`{TravelScheduleId, Day, TravelScheduleUpdateTime,
+RecommendResult, ChooseResult, BestSortTsdList[{tsdId, arrivalTime,
+arrivalTrafficTime, departureTime, sort, stayTime}]}`) and was not
+cracked. Out of scope for the CLI.
 
 ### Trip-level edits
 
