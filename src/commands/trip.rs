@@ -5,7 +5,7 @@ use super::{
     validate_minutes, value,
 };
 use crate::api::trips::{self, Position};
-use crate::api::types::{Category, CreatedTrip, Day, EditInfo, TripDetail};
+use crate::api::types::{Category, CreatedTrip, Day, EditInfo, TripDetail, Tsd};
 use crate::cli::{Context, TripCommand};
 use crate::datetime::{Date, parse_clock};
 use crate::error::{AxiError, ErrorCode};
@@ -68,6 +68,12 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
                 name: name.as_deref(),
             },
         ),
+        TripCommand::Note {
+            trip_id,
+            stop,
+            set,
+            clear,
+        } => note(ctx, trip_id, stop.as_deref(), set.as_deref(), *clear),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
     }
@@ -752,6 +758,92 @@ fn edited_help(trip_id: &str, tsd_id: &str) -> Vec<String> {
     ]
 }
 
+/// Which day a stop sits in, where in that day, and the row itself.
+fn locate_stop(detail: &TripDetail, tsd_id: &str) -> Option<(i64, usize, Tsd)> {
+    detail.day_list.iter().find_map(|day| {
+        day.tsd_list
+            .iter()
+            .enumerate()
+            .find(|(_, stop)| stop.id.as_deref() == Some(tsd_id))
+            .map(|(index, stop)| (day.day.or(stop.day).unwrap_or(0), index, stop.clone()))
+    })
+}
+
+fn note(
+    ctx: &Context,
+    trip_id: &str,
+    tsd_id: Option<&str>,
+    set: Option<&str>,
+    clear: bool,
+) -> Result<Document, AxiError> {
+    if let Some(text) = set {
+        if text.trim().is_empty() {
+            return Err(AxiError::usage(
+                "--set is empty; pass --clear to remove the note",
+            ));
+        }
+    }
+
+    let client = ctx.member_client("trip note")?;
+    let update_time = trips::current_update_time(&client, trip_id)?;
+    let detail = trips::trip_detail(&client, trip_id, update_time)?;
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    let current = match tsd_id {
+        Some(tsd_id) => {
+            let (_, _, stop) = locate_stop(&detail, tsd_id).ok_or_else(|| {
+                AxiError::not_found(format!("stop {tsd_id} is not in trip {trip_id}")).with_help([
+                    format!(
+                        "Run `chictrip-axi trip view {trip_id}` to list the stops and their tsd_id"
+                    ),
+                ])
+            })?;
+            doc.set("stop_id", tsd_id);
+            doc.set("name", value(&stop.name));
+            stop.note.clone().unwrap_or_default()
+        }
+        None => detail.travel_schedule_info.note.clone().unwrap_or_default(),
+    };
+
+    let wanted = match (set, clear) {
+        (None, false) => {
+            doc.set("note", current.as_str());
+            doc.set_strings("help", &note_help(trip_id, tsd_id));
+            return Ok(doc);
+        }
+        (Some(text), _) => text.to_string(),
+        (None, true) => String::new(),
+    };
+
+    doc.set("note", wanted.as_str());
+    if wanted == current {
+        doc.set("status", "unchanged (no-op)");
+        doc.set_strings("help", &note_help(trip_id, tsd_id));
+        return Ok(doc);
+    }
+
+    let update_time = match tsd_id {
+        Some(tsd_id) => trips::set_stop_note(&client, trip_id, tsd_id, &wanted, update_time)?,
+        None => trips::set_trip_note(&client, trip_id, &wanted, update_time)?,
+    };
+    doc.set("status", if wanted.is_empty() { "cleared" } else { "set" });
+    doc.set("update_time", update_time);
+    doc.set_strings("help", &note_help(trip_id, tsd_id));
+    Ok(doc)
+}
+
+fn note_help(trip_id: &str, tsd_id: Option<&str>) -> Vec<String> {
+    match tsd_id {
+        Some(tsd_id) => vec![format!(
+            "Run `chictrip-axi trip note {trip_id} --stop {tsd_id} --set \"<text>\"` to change it"
+        )],
+        None => vec![format!(
+            "Run `chictrip-axi trip note {trip_id} --set \"<text>\"` to change it"
+        )],
+    }
+}
+
 fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, AxiError> {
     let client = ctx.member_client("trip remove")?;
     let mut update_time = trips::current_update_time(&client, trip_id)?;
@@ -760,13 +852,7 @@ fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, Ax
     let mut removed = Table::new(&["tsd_id", "name", "day"], &[]);
     let mut skipped = Table::new(&["tsd_id", "reason"], &[]);
     for tsd_id in stops {
-        let found = detail.day_list.iter().find_map(|day| {
-            day.tsd_list
-                .iter()
-                .find(|stop| stop.id.as_deref() == Some(tsd_id.as_str()))
-                .map(|stop| (day.day.or(stop.day).unwrap_or(0), stop.clone()))
-        });
-        let Some((day, stop)) = found else {
+        let Some((day, _, stop)) = locate_stop(&detail, tsd_id) else {
             skipped.push(&[
                 ("tsd_id", Value::from(tsd_id.as_str())),
                 ("reason", Value::from("not in trip (no-op)")),

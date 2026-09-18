@@ -37,6 +37,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "trip edit <trip-id> --stop ID",
         "Change a stop's stay or times or category or name",
     ),
+    (
+        "trip note <trip-id> [--stop ID]",
+        "Read or set the trip note or a stop's",
+    ),
     ("trip remove <trip-id> --stop ID...", "Remove stops"),
     ("trip delete <trip-id>", "Delete a whole trip"),
     (

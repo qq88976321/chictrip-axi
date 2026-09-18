@@ -988,6 +988,145 @@ fn trip_edit_retries_once_on_an_update_time_conflict() {
 }
 
 #[test]
+fn trip_note_reads_sets_and_clears_the_stop_note() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetail/UpdateNote" => Some(envelope("001", "1789710800", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("note-stop");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "note", TRIP, "--stop", STOP],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("\nname: \"Senso-ji\"\n"), "{stdout}");
+    assert!(
+        stdout.contains("\nnote: \"Reservation 19:00\"\n"),
+        "{stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/UpdateNote".to_string()),
+        "a read never writes"
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "note",
+            TRIP,
+            "--stop",
+            STOP,
+            "--set",
+            "Reservation 19:00",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: \"unchanged (no-op)\""), "{stdout}");
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/UpdateNote".to_string()),
+        "the same text again never writes"
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "note", TRIP, "--stop", STOP, "--set", "new text"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("status: set\n"), "{stdout}");
+    assert!(stdout.contains("update_time: 1789710800\n"), "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/UpdateNote")
+        .expect("UpdateNote was called");
+    assert_eq!(write.method, "PUT");
+    assert_eq!(write.field("TsdId").as_deref(), Some(STOP));
+    assert_eq!(write.field("Note").as_deref(), Some("new text"));
+    assert_eq!(
+        write.field("TravelScheduleUpdateTime").as_deref(),
+        Some("100")
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "note", TRIP, "--stop", STOP, "--clear"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("\nnote: \"\"\n"), "{stdout}");
+    assert!(stdout.contains("status: cleared\n"), "{stdout}");
+    let cleared = server
+        .requests()
+        .into_iter()
+        .rfind(|r| r.path == "/TravelScheduleDetail/UpdateNote")
+        .expect("UpdateNote was called");
+    assert_eq!(cleared.field("Note").as_deref(), Some(""));
+}
+
+#[test]
+fn trip_note_on_the_trip_uses_the_trip_endpoint() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelSchedule/UpdateNote" => Some(envelope("001", "1789710900", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("note-trip");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(&server, &sandbox.auth_file(), &["trip", "note", TRIP]);
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("\nnote: Buy the 72h subway pass at Narita\n"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("stop_id"), "{stdout}");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "note", TRIP, "--set", "Pick the pass up at Narita"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelSchedule/UpdateNote")
+        .expect("UpdateNote was called");
+    assert_eq!(write.method, "PUT");
+    assert_eq!(write.field("id").as_deref(), Some(TRIP));
+    assert_eq!(
+        write.field("note").as_deref(),
+        Some("Pick the pass up at Narita")
+    );
+    assert_eq!(write.field("updateTime").as_deref(), Some("100"));
+}
+
+#[test]
+fn trip_note_rejects_set_together_with_clear_before_any_request() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("note-usage");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "note", TRIP, "--set", "x", "--clear"],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+#[test]
 fn trip_create_is_a_no_op_when_the_same_trip_already_exists() {
     let server = Server::start(|request, _| match request.path.as_str() {
         "/TravelSchedule/GetMyAndCollaboration" => ok(TRIP_LIST),

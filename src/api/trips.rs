@@ -303,6 +303,42 @@ pub fn update_stop(
     })
 }
 
+pub fn set_stop_note(
+    client: &Client,
+    trip_id: &str,
+    tsd_id: &str,
+    note: &str,
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("TravelScheduleId", trip_id.to_string()),
+            ("TsdId", tsd_id.to_string()),
+            ("Note", note.to_string()),
+            ("TravelScheduleUpdateTime", time.to_string()),
+        ];
+        let data = client.put_form("TravelScheduleDetail/UpdateNote", &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
+pub fn set_trip_note(
+    client: &Client,
+    trip_id: &str,
+    note: &str,
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("id", trip_id.to_string()),
+            ("note", note.to_string()),
+            ("updateTime", time.to_string()),
+        ];
+        let data = client.put_form("TravelSchedule/UpdateNote", &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
 pub fn delete_trip(client: &Client, trip_id: &str) -> Result<(), AxiError> {
     client
         .delete_form("TravelSchedule/Delete", &[("id", trip_id.to_string())])

@@ -274,6 +274,24 @@ A batch keeps the order it was given: --poi A --poi B --after X yields X, A, B."
         #[arg(long, value_name = "TEXT")]
         name: Option<String>,
     },
+    /// Read or set the note on a trip, or on one stop with --stop
+    #[command(after_help = "Examples:
+  chictrip-axi trip note <trip-id>
+  chictrip-axi trip note <trip-id> --set \"Buy the 72h subway pass at Narita\"
+  chictrip-axi trip note <trip-id> --stop <tsd-id> --set \"Reservation 19:00 under Chang\"
+  chictrip-axi trip note <trip-id> --stop <tsd-id> --clear
+Without --set or --clear the note is printed in full. The same text again is a no-op. chicTrip has no per-day note.")]
+    Note {
+        trip_id: String,
+        /// tsd_id from `trip view`; omit for the trip's own note
+        #[arg(long, value_name = "TSD-ID")]
+        stop: Option<String>,
+        #[arg(long, value_name = "TEXT", conflicts_with = "clear")]
+        set: Option<String>,
+        /// Remove the note
+        #[arg(long)]
+        clear: bool,
+    },
     /// Remove stops by their tsd_id
     #[command(after_help = "Examples:
   chictrip-axi trip remove <trip-id> --stop <tsd-id>
