@@ -10,6 +10,8 @@ use crate::output::{Document, Table, truncate};
 use serde_json::Value;
 
 const TRAFFIC_MODES: [&str; 5] = ["Custom", "Transit", "Driving", "Walk", "PublicTransport"];
+/// chicTrip's name for the slot in front of a day's first stop.
+const START_SLOT: &str = "start";
 const MAX_TRIP_DAYS: i64 = 60;
 
 pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
@@ -30,8 +32,17 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             day,
             poi,
             position,
+            after,
             allow_duplicate,
-        } => add(ctx, trip_id, *day, poi, position, *allow_duplicate),
+        } => add(
+            ctx,
+            trip_id,
+            *day,
+            poi,
+            position,
+            after.as_deref(),
+            *allow_duplicate,
+        ),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
     }
@@ -278,25 +289,39 @@ fn preview_document(
     Ok(doc)
 }
 
+/// Where the batch goes, before the day is read and the slot is known.
+enum Target {
+    Last,
+    Best,
+    First,
+    After(String),
+}
+
+#[allow(clippy::too_many_arguments)]
 fn add(
     ctx: &Context,
     trip_id: &str,
     day: i64,
     pois: &[String],
     position: &str,
+    after: Option<&str>,
     allow_duplicate: bool,
 ) -> Result<Document, AxiError> {
     if day < 1 {
         return Err(AxiError::usage("--day starts at 1"));
     }
-    let position = match position.to_ascii_lowercase().as_str() {
-        "last" => Position::Last,
-        "best" => Position::Best,
-        other => {
-            return Err(AxiError::usage(format!(
-                "unknown --position '{other}'; valid values: last,best"
-            )));
-        }
+    let target = match after {
+        Some(anchor) => Target::After(anchor.to_string()),
+        None => match position.to_ascii_lowercase().as_str() {
+            "last" => Target::Last,
+            "first" => Target::First,
+            "best" => Target::Best,
+            other => {
+                return Err(AxiError::usage(format!(
+                    "unknown --position '{other}'; valid values: last,first,best"
+                )));
+            }
+        },
     };
 
     let client = ctx.member_client("trip add")?;
@@ -314,9 +339,9 @@ fn add(
 
     let before = day_stops(&detail, day);
     let mut present: Vec<String> = before.iter().filter_map(|s| s.poi_id.clone()).collect();
-    let known_tsd: Vec<String> = before.iter().filter_map(|s| s.id.clone()).collect();
+    let (head_slot, rest_slot) = slots_for(&before, &target, trip_id, day)?;
 
-    let mut added: Vec<(String, String)> = Vec::new();
+    let mut added: Vec<(String, String, String)> = Vec::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut failure: Option<AxiError> = None;
 
@@ -332,11 +357,16 @@ fn add(
                 break;
             }
         };
+        let position = if added.is_empty() {
+            &head_slot
+        } else {
+            &rest_slot
+        };
         match trips::add_stop(&client, trip_id, day, &poi, position, update_time) {
-            Ok(new_time) => {
+            Ok((tsd_id, new_time)) => {
                 update_time = new_time;
                 present.push(poi_id.clone());
-                added.push((poi_id.clone(), poi.name.clone().unwrap_or_default()));
+                added.push((poi_id.clone(), poi.name.clone().unwrap_or_default(), tsd_id));
             }
             Err(e) => {
                 failure = Some(e);
@@ -366,30 +396,22 @@ fn add(
 
     let mut table = Table::new(&["poi_id", "name", "tsd_id", "seq"], &[]);
     if !added.is_empty() {
-        let after = trips::trip_detail(&client, trip_id, update_time)?;
+        let after: TripDetail = trips::trip_detail(&client, trip_id, update_time)?;
         update_time = after
             .travel_schedule_info
             .update_time
             .unwrap_or(update_time);
         let stops = day_stops(&after, day);
-        let mut used: Vec<String> = known_tsd.clone();
-        for (poi_id, name) in &added {
-            let found = stops.iter().enumerate().find(|(_, stop)| {
-                stop.poi_id.as_deref() == Some(poi_id.as_str())
-                    && !used.contains(stop.id.as_ref().unwrap_or(&String::new()))
-            });
-            let (tsd_id, seq) = match found {
-                Some((index, stop)) => {
-                    let id = stop.id.clone().unwrap_or_default();
-                    used.push(id.clone());
-                    (Value::from(id), Value::from(index as i64 + 1))
-                }
-                None => (Value::Null, Value::Null),
-            };
+        for (poi_id, name, tsd_id) in &added {
+            let seq = stops
+                .iter()
+                .position(|stop| stop.id.as_deref() == Some(tsd_id.as_str()))
+                .map(|index| Value::from(index as i64 + 1))
+                .unwrap_or(Value::Null);
             table.push(&[
                 ("poi_id", Value::from(poi_id.as_str())),
                 ("name", Value::from(name.as_str())),
-                ("tsd_id", tsd_id),
+                ("tsd_id", Value::from(tsd_id.as_str())),
                 ("seq", seq),
             ]);
         }
@@ -419,6 +441,46 @@ fn add(
         ],
     );
     Ok(doc)
+}
+
+/// The slot the first insert of a batch uses and the slot every later one
+/// uses. They differ only for `first`: the day's old first stop has no slot
+/// of its own until something is put in front of it, and from then on it is
+/// the anchor that keeps `--poi A --poi B` in the order it was given.
+fn slots_for(
+    stops: &[crate::api::types::Tsd],
+    target: &Target,
+    trip_id: &str,
+    day: i64,
+) -> Result<(Position, Position), AxiError> {
+    let id_at = |index: usize| stops.get(index).and_then(|s| s.id.clone());
+    let same = |slot: Option<String>| {
+        let slot = slot.map_or(Position::Last, Position::Slot);
+        (slot.clone(), slot)
+    };
+    match target {
+        Target::Last => Ok((Position::Last, Position::Last)),
+        Target::Best => Ok((Position::Best, Position::Best)),
+        Target::First => Ok(match id_at(0) {
+            Some(first) => (
+                Position::Slot(START_SLOT.to_string()),
+                Position::Slot(first),
+            ),
+            None => (Position::Last, Position::Last),
+        }),
+        Target::After(anchor) => {
+            let index = stops
+                .iter()
+                .position(|s| s.id.as_deref() == Some(anchor.as_str()))
+                .ok_or_else(|| {
+                    AxiError::not_found(format!("stop {anchor} is not in day {day} of this trip"))
+                        .with_help([format!(
+                            "Run `chictrip-axi trip view {trip_id} --day {day}` to list that day"
+                        )])
+                })?;
+            Ok(same(id_at(index + 1)))
+        }
+    }
 }
 
 fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, AxiError> {

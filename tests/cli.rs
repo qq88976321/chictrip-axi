@@ -24,6 +24,8 @@ const TRIP_DETAIL_AFTER_ADD: &str = include_str!("fixtures/trip_detail_after_add
 const TRIP_DETAIL_FULL: &str = include_str!("fixtures/trip_detail_full.json");
 const USER_LABELS: &str = include_str!("fixtures/user_labels.json");
 const ADD_WHERE: &str = include_str!("fixtures/add_where.json");
+const ADD_WHERE_FULL: &str = include_str!("fixtures/add_where_full.json");
+const ADD_WHERE_PREPENDED: &str = include_str!("fixtures/add_where_prepended.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -404,9 +406,11 @@ fn an_update_time_conflict_is_re_read_and_retried_once() {
         "/TravelScheduleDetail/Add" if seen == 0 => {
             envelope("004", r#"{"updateTime":150}"#, r#""Update time conflict""#)
         }
-        "/TravelScheduleDetail/Add" => {
-            envelope("001", r#"{"travelScheduleUpdateTime":1789710600}"#, "null")
-        }
+        "/TravelScheduleDetail/Add" => envelope(
+            "001",
+            r#"{"tsdInfo":{"id":"c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"},"travelScheduleUpdateTime":1789710600}"#,
+            "null",
+        ),
         _ => envelope("002", "null", r#""404""#),
     });
     let sandbox = Sandbox::new("conflict");
@@ -578,6 +582,176 @@ fn trip_preview_full_keeps_the_detail_columns_without_the_tsd_id() {
         !stdout.contains("72h subway pass"),
         "Preview hides the trip note: {stdout}"
     );
+}
+
+#[test]
+fn trip_add_inserts_before_the_right_slot_and_chains_the_batch() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/Poi/GetPoiById" => Some(ok(POI_DETAIL)),
+        "/TravelScheduleDetail/GetAddWhere" => Some(ok(ADD_WHERE_FULL)),
+        "/TravelScheduleDetail/Add" if seen == 0 => Some(envelope(
+            "001",
+            r#"{"tsdInfo":{"id":"new-1"},"travelScheduleUpdateTime":101}"#,
+            "null",
+        )),
+        "/TravelScheduleDetail/Add" => Some(envelope(
+            "001",
+            r#"{"tsdInfo":{"id":"new-2"},"travelScheduleUpdateTime":102}"#,
+            "null",
+        )),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("add-after");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "add",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "1",
+            "--poi",
+            "p-1",
+            "--poi",
+            "p-2",
+            "--after",
+            "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let adds: Vec<Request> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.path == "/TravelScheduleDetail/Add")
+        .collect();
+    assert_eq!(adds.len(), 2, "{stdout}");
+    for add in &adds {
+        assert_eq!(
+            add.field("AddWhereId").as_deref(),
+            Some("c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+            "the anchor slot does not move while the batch runs"
+        );
+    }
+    assert!(
+        stdout.contains("added[2]{poi_id,name,tsd_id,seq}:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\"p-1\","), "{stdout}");
+    assert!(stdout.contains("new-1"), "{stdout}");
+    assert!(stdout.contains("new-2"), "{stdout}");
+}
+
+#[test]
+fn trip_add_position_first_prepends_then_chains_behind_itself() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/Poi/GetPoiById" => Some(ok(POI_DETAIL)),
+        "/TravelScheduleDetail/GetAddWhere" if seen == 0 => Some(ok(ADD_WHERE_FULL)),
+        "/TravelScheduleDetail/GetAddWhere" => Some(ok(ADD_WHERE_PREPENDED)),
+        "/TravelScheduleDetail/Add" => Some(envelope(
+            "001",
+            r#"{"tsdInfo":{"id":"new-1"},"travelScheduleUpdateTime":101}"#,
+            "null",
+        )),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("add-first");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "add",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "1",
+            "--poi",
+            "p-3",
+            "--poi",
+            "p-4",
+            "--position",
+            "first",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let slots: Vec<Option<String>> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.path == "/TravelScheduleDetail/Add")
+        .map(|r| r.field("AddWhereId"))
+        .collect();
+    assert_eq!(
+        slots,
+        vec![
+            Some("start".to_string()),
+            Some("b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa".to_string())
+        ],
+        "first prepends, then chains behind what it just inserted"
+    );
+}
+
+#[test]
+fn trip_add_after_a_stop_of_another_day_is_not_found_before_any_write() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("add-after-miss");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "add",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "1",
+            "--poi",
+            "p-1",
+            "--after",
+            "e0000000-dddd-4ddd-8ddd-dddddddddddd",
+        ],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: not_found\n"), "{stdout}");
+    assert!(stdout.contains("is not in day 1 of this trip"), "{stdout}");
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/Add".to_string()),
+        "a bad anchor never writes"
+    );
+}
+
+#[test]
+fn trip_add_rejects_after_together_with_position() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("add-after-conflict");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "add",
+            "3c1d0a2e-1111-4111-8111-111111111111",
+            "--day",
+            "1",
+            "--poi",
+            "p-1",
+            "--after",
+            "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "--position",
+            "first",
+        ],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    assert!(server.requests().is_empty(), "usage errors never call out");
 }
 
 #[test]

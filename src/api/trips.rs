@@ -2,17 +2,24 @@
 //! `updateTime` chain the API's optimistic locking requires.
 
 use super::Client;
-use super::types::{AddWhereResult, Poi, SystemCover, TripDetail, TripSummary, UserLabel};
+use super::types::{
+    AddWhereResult, AddedStop, Poi, SystemCover, TripDetail, TripSummary, UserLabel,
+};
 use crate::error::{AxiError, ErrorCode};
 use serde_json::Value;
 
 /// The zh-TW system label the web app treats as "no label".
 const UNLABELED: &str = "\u{672a}\u{6a19}\u{7c64}";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Where `GetAddWhere` can put a new stop. A day's slots are `start`, one
+/// named after each stop EXCEPT the first, and `end`; an empty day has a
+/// single slot named `first`. A slot named after a stop puts the new one in
+/// FRONT of it, so `Slot` carries an `addWhereId` verbatim.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Position {
     Last,
     Best,
+    Slot(String),
 }
 
 pub fn list_trips(client: &Client) -> Result<Vec<TripSummary>, AxiError> {
@@ -113,7 +120,7 @@ fn add_where_slot(
     trip_id: &str,
     poi_id: &str,
     day: i64,
-    position: Position,
+    position: &Position,
 ) -> Result<String, AxiError> {
     let data = client.get(
         "TravelScheduleDetail/GetAddWhere",
@@ -137,6 +144,9 @@ fn add_where_slot(
             .find(|s| s.is_best_of_day)
             .or_else(|| slots.iter().find(|s| s.is_best_of_all))
             .or_else(|| slots.first()),
+        Position::Slot(id) => slots
+            .iter()
+            .find(|s| s.add_where_id.as_deref() == Some(id.as_str())),
     };
     chosen
         .and_then(|s| s.add_where_id.clone())
@@ -169,15 +179,15 @@ fn new_update_time(data: &Value, fallback: i64) -> i64 {
         .unwrap_or(fallback)
 }
 
-/// Adds one POI and returns the trip's new update time.
+/// Adds one POI and returns its new tsd id and the trip's new update time.
 pub fn add_stop(
     client: &Client,
     trip_id: &str,
     day: i64,
     poi: &Poi,
-    position: Position,
+    position: &Position,
     update_time: i64,
-) -> Result<i64, AxiError> {
+) -> Result<(String, i64), AxiError> {
     let poi_id = poi.id.clone().unwrap_or_default();
     let slot = add_where_slot(client, trip_id, &poi_id, day, position)?;
     let cover = poi
@@ -197,7 +207,9 @@ pub fn add_stop(
             ("TsdName", name.clone()),
         ];
         let data = client.post_form("TravelScheduleDetail/Add", &form)?;
-        Ok(new_update_time(&data, time))
+        let new_time = new_update_time(&data, time);
+        let added: AddedStop = decode(data)?;
+        Ok((added.tsd_info.id.unwrap_or_default(), new_time))
     })
 }
 

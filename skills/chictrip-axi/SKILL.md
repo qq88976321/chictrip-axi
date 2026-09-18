@@ -45,7 +45,7 @@ Then run `chictrip-axi auth set --from-json -` and paste. `chictrip-axi auth sta
 - `chictrip-axi trip create --name --start --end` - Create an empty trip
 - `chictrip-axi trip view <trip-id>` - Stops of a trip day by day (--full for notes and legs)
 - `chictrip-axi trip preview <trip-id>` - Stops of any trip by id (no login needed)
-- `chictrip-axi trip add <trip-id> --day N --poi ID...` - Append POIs to a day (skips duplicates)
+- `chictrip-axi trip add <trip-id> --day N --poi ID...` - Add POIs to a day (skips duplicates)
 - `chictrip-axi trip remove <trip-id> --stop ID...` - Remove stops
 - `chictrip-axi trip delete <trip-id>` - Delete a whole trip
 - `chictrip-axi tour list` - Popular expert itineraries (--curated for editor picks)

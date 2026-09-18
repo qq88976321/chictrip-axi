@@ -225,10 +225,12 @@ chicTrip answers for any trip id, shared or not.")]
         #[arg(long)]
         full: bool,
     },
-    /// Append POIs to a day, skipping ones already there
+    /// Add POIs to a day, skipping ones already there
     #[command(after_help = "Examples:
   chictrip-axi trip add <trip-id> --day 1 --poi 8a48a94c-495f-44da-be0d-e1d7564f2b07
-  chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id> --position best")]
+  chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id> --position best
+  chictrip-axi trip add <trip-id> --day 1 --poi <poi-id> --poi <poi-id> --after <tsd-id>
+A batch keeps the order it was given: --poi A --poi B --after X yields X, A, B.")]
     Add {
         trip_id: String,
         #[arg(long, value_name = "N")]
@@ -236,9 +238,12 @@ chicTrip answers for any trip id, shared or not.")]
         /// POI id from `poi search`; repeatable, added in order
         #[arg(long = "poi", value_name = "POI-ID", required = true)]
         poi: Vec<String>,
-        /// last appends to the end of the day, best uses chicTrip's suggestion
+        /// last appends, first prepends, best uses chicTrip's suggestion
         #[arg(long, value_name = "WHERE", default_value = "last")]
         position: String,
+        /// Insert right after this stop of the same day
+        #[arg(long, value_name = "TSD-ID", conflicts_with = "position")]
+        after: Option<String>,
         /// Add a POI even when the day already contains it
         #[arg(long)]
         allow_duplicate: bool,

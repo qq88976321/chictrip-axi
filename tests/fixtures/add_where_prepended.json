@@ -1,0 +1,72 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "dayList": [
+   {
+    "day": 1,
+    "addWhereList": [
+     {
+      "addWhereId": "start",
+      "sort": 0,
+      "isBestOfDay": false,
+      "isBestOfAll": true
+     },
+     {
+      "addWhereId": "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "sort": 1,
+      "isBestOfDay": false,
+      "isBestOfAll": false
+     },
+     {
+      "addWhereId": "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "sort": 2,
+      "isBestOfDay": false,
+      "isBestOfAll": false
+     },
+     {
+      "addWhereId": "d0000000-cccc-4ccc-8ccc-cccccccccccc",
+      "sort": 3,
+      "isBestOfDay": true,
+      "isBestOfAll": false
+     },
+     {
+      "addWhereId": "end",
+      "sort": 4,
+      "isBestOfDay": false,
+      "isBestOfAll": false
+     }
+    ]
+   },
+   {
+    "day": 2,
+    "addWhereList": [
+     {
+      "addWhereId": "start",
+      "sort": 0,
+      "isBestOfDay": false,
+      "isBestOfAll": false
+     },
+     {
+      "addWhereId": "end",
+      "sort": 1,
+      "isBestOfDay": true,
+      "isBestOfAll": false
+     }
+    ]
+   },
+   {
+    "day": 3,
+    "addWhereList": [
+     {
+      "addWhereId": "first",
+      "sort": 0,
+      "isBestOfDay": true,
+      "isBestOfAll": false
+     }
+    ]
+   }
+  ]
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}
