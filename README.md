@@ -10,11 +10,14 @@ Docs site: <https://qq88976321.github.io/chictrip-axi/>.
 
 ## Status
 
-Eighteen commands: search places, read expert itineraries, build trips
-in your own account, and wire the CLI into your agent's session. Reads
-work with no setup at all, `trip preview` of any trip by id included;
-the other trip commands need a token you copy out of the browser once. The chicTrip commands were exercised against the live API on
-2026-09-18, the trip commands with a real member account.
+Twenty-four commands: search places, read expert itineraries, build
+and edit trips in your own account (stops, times, notes, legs, order,
+and places chicTrip does not list), and wire the CLI into your agent's
+session. Reads work with no setup at all, `trip preview` of any trip
+by id included; the other trip commands and `poi create` need a token
+you copy out of the browser once. The chicTrip commands were exercised
+against the live API on 2026-09-18 and 2026-09-19, the trip commands
+with a real member account.
 
 Personal tool, built with heavy AI assistance (Claude Code). I review
 what ships, but it comes with no warranty and no support commitment:
@@ -79,12 +82,12 @@ A bare invocation prints live content rather than help text:
 
 ```
 bin: ~/.local/bin/chictrip-axi
-description: Agent-first CLI for chicTrip: search places, read expert itineraries, build trips in your account
+description: Agent-first CLI for chicTrip: search places, read expert itineraries, build and edit trips in your account
 auth: guest
 tours[5]{id,name,destination,expert,likes}:
   "daebf5f2-...",Tokyo 7 days 6 nights,Japan,Mamo,4014
   ...
-commands[18]{command,summary}:
+commands[24]{command,summary}:
   auth set,Store a member token copied from the browser
   ...
 help[2]: ...
@@ -121,17 +124,26 @@ chictrip-axi location search Kyoto                     # the --location key trip
 chictrip-axi trip create --name "Kyoto weekend" --start 2026-11-07 --end 2026-11-08 --location 7,9,45
 chictrip-axi tour copy <tour-id>                       # or start from an expert itinerary
 chictrip-axi trip preview <other-trip-id> --day 1      # or read somebody else's trip by id
-chictrip-axi trip view <trip-id>                       # stops day by day, with the tsd_id
+chictrip-axi trip view <trip-id> --full                # stops day by day: tsd_id, notes, legs
 chictrip-axi poi search "Kamakura" --limit 5           # find ids to add
 chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id>
+chictrip-axi trip edit <trip-id> --stop <tsd-id> --arrive 10:30 --stay 90
+chictrip-axi trip note <trip-id> --stop <tsd-id> --set "book the 10:00 slot"
+chictrip-axi trip leg <trip-id> --stop <tsd-id> --mode transit
+chictrip-axi trip move <trip-id> --stop <tsd-id> --position first
+chictrip-axi poi create --name "Our ryokan" --at 35.0116,135.7681 --category moon
 chictrip-axi trip remove <trip-id> --stop <tsd-id>     # undo one stop
 chictrip-axi trip delete <trip-id>
 ```
 
 `trip add` skips a POI the day already contains, `trip create` returns
-the existing trip when the name and dates match, and `trip delete`
-succeeds on a trip that is already gone, so a retried turn cannot make
-a mess. Nothing prompts; every value is a flag.
+the existing trip when the name and dates match, `trip delete`
+succeeds on a trip that is already gone, and `trip edit`, `trip note`,
+`trip leg`, `trip traffic`, and `trip move` write nothing when the
+trip already says what you asked for, so a retried turn cannot make a
+mess. The one exception is `poi create`: a private place cannot be
+searched for, so every run files a new one and chicTrip has no way to
+delete it. Nothing prompts; every value is a flag.
 
 ### Output
 
