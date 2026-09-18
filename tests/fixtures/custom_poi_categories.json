@@ -1,0 +1,14 @@
+{
+ "apiStatus": "001",
+ "data": [
+  {"id": "9b471f78-4c89-42ba-bf96-5c96388b6898", "name": "Sights", "icon": "enterTainment"},
+  {"id": "9449daa2-12ae-4a65-aa31-8ef93283763f", "name": "Food", "icon": "food"},
+  {"id": "5056226a-2b6b-41cb-ab90-f666f70c1587", "name": "Shopping", "icon": "shop"},
+  {"id": "979a54ec-f96d-411b-a9ad-4bde4c64697b", "name": "Lodging", "icon": "moon"},
+  {"id": "056f2fd9-2758-4375-b19c-93e879c30371", "name": "Car rental", "icon": "rentCar"},
+  {"id": "76500eed-0998-4a35-820b-73794624ead5", "name": "Station", "icon": "train"},
+  {"id": "59014389-fe12-4578-803e-1f80c4bce327", "name": "Airport", "icon": "plane"}
+ ],
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

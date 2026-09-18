@@ -3,8 +3,8 @@
 
 use super::Client;
 use super::types::{
-    AddWhereResult, AddedStop, DayTraffic, EditInfo, Poi, RouteList, SystemCover, TripDetail,
-    TripSummary, UserLabel,
+    AddWhereResult, AddedStop, Category, DayTraffic, EditInfo, Poi, RouteList, SystemCover,
+    TripDetail, TripSummary, UserLabel,
 };
 use crate::error::{AxiError, ErrorCode};
 use serde_json::Value;
@@ -532,6 +532,41 @@ pub fn sort_day(
         let data = client.put_form("TravelScheduleDetail/Sort", &form)?;
         Ok(new_update_time(&data, time))
     })
+}
+
+/// A place chicTrip does not list, as `AddCustomPoiForWeb` wants it.
+pub struct CustomPoi {
+    pub name: String,
+    pub category_id: String,
+    pub lat: f64,
+    pub lng: f64,
+    pub address: String,
+    pub description: String,
+}
+
+/// The seven icons the web app offers for a private place. `GetAll` answers
+/// more rows, Tag rows among them, that this form does not accept.
+pub fn custom_poi_categories(client: &Client) -> Result<Vec<Category>, AxiError> {
+    let data = client.get("PoiClassification/GetCustomPoiCategory", &[])?;
+    decode(data)
+}
+
+/// The web app sends multipart here, but urlencoded is accepted as well
+/// (verified live 2026-09-19), so this stays on the shared form transport.
+pub fn create_custom_poi(client: &Client, poi: &CustomPoi) -> Result<Poi, AxiError> {
+    let form = [
+        ("name", poi.name.clone()),
+        ("categoryId", poi.category_id.clone()),
+        ("longitude", poi.lng.to_string()),
+        ("latitude", poi.lat.to_string()),
+        ("address", poi.address.clone()),
+        ("description", poi.description.clone()),
+    ];
+    let data = client.post_form("Poi/AddCustomPoiForWeb", &form)?;
+    if data.is_null() {
+        return Err(AxiError::internal("chicTrip filed no place"));
+    }
+    decode(data)
 }
 
 pub fn delete_trip(client: &Client, trip_id: &str) -> Result<(), AxiError> {

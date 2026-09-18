@@ -1,0 +1,16 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "id": "7d2e5a10-6666-4666-8666-666666666666",
+  "name": "Aunt Mei's flat",
+  "categoryType": "food",
+  "address": "2-3-1 Asakusa",
+  "longitude": 139.7963,
+  "latitude": 35.7111,
+  "description": "the spare key is with the neighbour",
+  "authority": "private",
+  "createMode": "custom"
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

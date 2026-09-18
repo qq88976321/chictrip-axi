@@ -33,6 +33,8 @@ const ROUTE_LIST_DRIVING: &str = include_str!("fixtures/route_list_driving.json"
 const ROUTE_LIST_CUSTOM: &str = include_str!("fixtures/route_list_custom.json");
 const DAY_TRAFFIC: &str = include_str!("fixtures/day_traffic.json");
 const TRIP_DETAIL_FULL_MOVED: &str = include_str!("fixtures/trip_detail_full_moved.json");
+const CUSTOM_POI_CATEGORIES: &str = include_str!("fixtures/custom_poi_categories.json");
+const CUSTOM_POI: &str = include_str!("fixtures/custom_poi.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -1600,6 +1602,105 @@ fn trip_move_without_a_target_is_a_usage_error_before_any_request() {
         assert_eq!(code, 2, "{args:?} {stdout}");
         assert!(stdout.starts_with("error: usage\n"), "{stdout}");
     }
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+#[test]
+fn poi_create_resolves_the_category_and_posts_the_form() {
+    let server = Server::start(|request, _| match request.path.as_str() {
+        "/PoiClassification/GetCustomPoiCategory" => ok(CUSTOM_POI_CATEGORIES),
+        "/Poi/AddCustomPoiForWeb" => ok(CUSTOM_POI),
+        _ => envelope("002", "null", r#""404""#),
+    });
+    let sandbox = Sandbox::new("poi-create");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "poi",
+            "create",
+            "--name",
+            "Aunt Mei's flat",
+            "--at",
+            "35.7111,139.7963",
+            "--category",
+            "food",
+            "--address",
+            "2-3-1 Asakusa",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/Poi/AddCustomPoiForWeb")
+        .expect("the place was filed");
+    assert_eq!(write.method, "POST");
+    assert_eq!(
+        write.field("categoryId").as_deref(),
+        Some("9449daa2-12ae-4a65-aa31-8ef93283763f")
+    );
+    assert_eq!(write.field("latitude").as_deref(), Some("35.7111"));
+    assert_eq!(write.field("longitude").as_deref(), Some("139.7963"));
+    assert_eq!(write.field("address").as_deref(), Some("2-3-1 Asakusa"));
+    assert!(
+        stdout.starts_with("poi:\n  id: \"7d2e5a10-6666-4666-8666-666666666666\"\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\n  category: food\n"), "{stdout}");
+    assert!(stdout.contains("not searchable"), "{stdout}");
+    assert!(stdout.contains("trip add <trip-id>"), "{stdout}");
+}
+
+#[test]
+fn poi_create_with_an_unknown_category_is_a_usage_error_after_one_read() {
+    let server = Server::start(|request, _| match request.path.as_str() {
+        "/PoiClassification/GetCustomPoiCategory" => ok(CUSTOM_POI_CATEGORIES),
+        _ => envelope("002", "null", r#""404""#),
+    });
+    let sandbox = Sandbox::new("poi-create-category");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "poi",
+            "create",
+            "--name",
+            "Hotel",
+            "--at",
+            "35.7,139.7",
+            "--category",
+            "hotel",
+        ],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(
+        stdout.contains("valid categories: enterTainment,food,shop,moon,rentCar,train,plane"),
+        "{stdout}"
+    );
+    assert_eq!(
+        server.paths(),
+        vec!["/PoiClassification/GetCustomPoiCategory"]
+    );
+}
+
+#[test]
+fn poi_create_rejects_a_bad_point_before_any_request() {
+    let server = Server::start(|_, _| ok(CUSTOM_POI_CATEGORIES));
+    let sandbox = Sandbox::new("poi-create-point");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["poi", "create", "--name", "Nowhere", "--at", "100,0"],
+    );
+    assert_eq!(code, 2, "{stdout}");
+    assert!(stdout.contains("invalid --at '100,0'"), "{stdout}");
     assert!(server.requests().is_empty(), "usage errors never call out");
 }
 

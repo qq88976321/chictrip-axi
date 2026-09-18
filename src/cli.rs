@@ -271,6 +271,7 @@ A batch keeps the order it was given: --poi A --poi B --after X yields X, A, B."
         /// Category icon; takeOff, transfer and landing make a flight row
         #[arg(long, value_name = "TYPE")]
         category: Option<String>,
+        /// Rename the stop; the POI keeps its own name
         #[arg(long, value_name = "TEXT")]
         name: Option<String>,
     },
@@ -286,6 +287,7 @@ Without --set or --clear the note is printed in full. The same text again is a n
         /// tsd_id from `trip view`; omit for the trip's own note
         #[arg(long, value_name = "TSD-ID")]
         stop: Option<String>,
+        /// Replace the note with this text
         #[arg(long, value_name = "TEXT", conflicts_with = "clear")]
         set: Option<String>,
         /// Remove the note
@@ -429,6 +431,28 @@ pub enum PoiCommand {
         /// Rows to print (1-200)
         #[arg(long, value_name = "N", default_value_t = 20)]
         limit: usize,
+    },
+    /// File a private place chicTrip does not list
+    #[command(after_help = "Examples:
+  chictrip-axi poi create --name \"Aunt Mei's flat\" --at 35.7111,139.7963
+  chictrip-axi poi create --name \"Hotel Gracery\" --at 35.6951,139.7010 --category moon --address \"1-19-1 Kabukicho\"
+The place is private to this account and never shows up in `poi search`, so keep the id. chicTrip has no delete for it and every run files another one, so this is the one command that is NOT idempotent.")]
+    Create {
+        /// What to call the place
+        #[arg(long, value_name = "TEXT")]
+        name: String,
+        /// LAT,LNG in decimal degrees
+        #[arg(long, value_name = "LAT,LNG")]
+        at: String,
+        /// enterTainment, food, shop, moon (lodging), rentCar, train, or plane
+        #[arg(long, value_name = "TYPE", default_value = "enterTainment")]
+        category: String,
+        /// Street address, for the stop's detail view
+        #[arg(long, value_name = "TEXT")]
+        address: Option<String>,
+        /// Description; it becomes the note of any stop added from this place
+        #[arg(long, value_name = "TEXT")]
+        note: Option<String>,
     },
     /// Address, hours, rating, and description of a place
     #[command(after_help = "Examples:

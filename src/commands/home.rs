@@ -70,6 +70,10 @@ pub const COMMAND_INDEX: &[(&str, &str)] = &[
         "Address and hours and rating and description of a place",
     ),
     (
+        "poi create --name --at",
+        "File a private place chicTrip does not list (not idempotent)",
+    ),
+    (
         "location search <keyword>",
         "Destination keys for trip create",
     ),

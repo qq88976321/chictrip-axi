@@ -58,6 +58,7 @@ Then run `chictrip-axi auth set --from-json -` and paste. `chictrip-axi auth sta
 - `chictrip-axi tour copy <tour-id>` - Copy an expert itinerary into my trips
 - `chictrip-axi poi search <keyword>` - Find places and their ids
 - `chictrip-axi poi view <poi-id>` - Address and hours and rating and description of a place
+- `chictrip-axi poi create --name --at` - File a private place chicTrip does not list (not idempotent)
 - `chictrip-axi location search <keyword>` - Destination keys for trip create
 - `chictrip-axi setup skill` - Write the agent skill file (--check verifies it)
 - `chictrip-axi setup hooks` - Install the Claude Code SessionStart hook on request

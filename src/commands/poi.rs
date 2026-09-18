@@ -1,6 +1,7 @@
 //! `poi search` and `poi view`.
 
-use super::{count, count_line, number, parse_near, validate_limit, value};
+use super::{count, count_line, number, parse_near, parse_point, validate_limit, value};
+use crate::api::trips;
 use crate::api::types::PoiSearchResult;
 use crate::cli::{Context, PoiCommand};
 use crate::error::AxiError;
@@ -15,7 +16,90 @@ pub fn run(ctx: &Context, command: &PoiCommand) -> Result<Document, AxiError> {
             limit,
         } => search(ctx, keyword, near.as_deref(), *limit),
         PoiCommand::View { poi_id, full } => view(ctx, poi_id, *full),
+        PoiCommand::Create {
+            name,
+            at,
+            category,
+            address,
+            note,
+        } => create(ctx, name, at, category, address.as_deref(), note.as_deref()),
     }
+}
+
+fn create(
+    ctx: &Context,
+    name: &str,
+    at: &str,
+    category: &str,
+    address: Option<&str>,
+    note: Option<&str>,
+) -> Result<Document, AxiError> {
+    if name.trim().is_empty() {
+        return Err(AxiError::usage("--name is empty"));
+    }
+    if category.trim().is_empty() {
+        return Err(AxiError::usage("--category is empty"));
+    }
+    let (lat, lng) = parse_point("--at", at)?;
+
+    let client = ctx.member_client("poi create")?;
+    let categories = trips::custom_poi_categories(&client)?;
+    let chosen = categories
+        .iter()
+        .find(|row| {
+            row.icon
+                .as_deref()
+                .is_some_and(|icon| icon.eq_ignore_ascii_case(category.trim()))
+        })
+        .ok_or_else(|| {
+            let icons: Vec<&str> = categories
+                .iter()
+                .filter_map(|c| c.icon.as_deref())
+                .collect();
+            AxiError::usage(format!(
+                "unknown --category '{category}'; valid categories: {}",
+                icons.join(",")
+            ))
+        })?;
+
+    let poi = trips::create_custom_poi(
+        &client,
+        &trips::CustomPoi {
+            name: name.trim().to_string(),
+            category_id: chosen.id.clone().unwrap_or_default(),
+            lat,
+            lng,
+            address: address.unwrap_or_default().to_string(),
+            description: note.unwrap_or_default().to_string(),
+        },
+    )?;
+    let id = poi.id.clone().unwrap_or_default();
+
+    let mut detail = Document::new();
+    detail.set("id", value(&poi.id));
+    detail.set("name", value(&poi.name));
+    detail.set("category", value(&poi.category_type));
+    detail.set("lat", number(poi.latitude));
+    detail.set("lng", number(poi.longitude));
+    detail.set("address", value(&poi.address));
+
+    let mut doc = Document::new();
+    doc.set_object("poi", detail);
+    doc.set_primary("poi");
+    doc.set(
+        "note",
+        "private to this account; not searchable; chicTrip cannot delete it",
+    );
+    doc.set_strings(
+        "help",
+        &[
+            format!(
+                "Run `chictrip-axi trip add <trip-id> --day <n> --poi {id}` to put it in a trip"
+            ),
+            format!("Run `chictrip-axi poi view {id}` to read it back"),
+        ],
+    );
+    Ok(doc)
 }
 
 fn search(
@@ -108,7 +192,7 @@ fn search(
 
 fn view(ctx: &Context, poi_id: &str, full: bool) -> Result<Document, AxiError> {
     let client = ctx.client()?;
-    let poi = crate::api::trips::poi_detail(&client, poi_id)?;
+    let poi = trips::poi_detail(&client, poi_id)?;
 
     let mut detail = Document::new();
     detail.set("id", value(&poi.id));
