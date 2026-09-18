@@ -45,6 +45,27 @@ impl Date {
     }
 }
 
+/// Parses `H:MM` or `HH:MM` into the zero-padded `HH:MM` chicTrip stores.
+/// The flag name is a parameter because the message has to say which of
+/// `--arrive` and `--depart` was wrong.
+pub fn parse_clock(flag: &str, text: &str) -> Result<String, AxiError> {
+    let bad = || {
+        AxiError::usage(format!(
+            "invalid {flag} '{text}'; expected HH:MM between 00:00 and 23:59"
+        ))
+    };
+    let (hour, minute) = text.trim().split_once(':').ok_or_else(bad)?;
+    if hour.is_empty() || hour.len() > 2 || minute.len() != 2 {
+        return Err(bad());
+    }
+    let hour: u32 = hour.parse().map_err(|_| bad())?;
+    let minute: u32 = minute.parse().map_err(|_| bad())?;
+    if hour > 23 || minute > 59 {
+        return Err(bad());
+    }
+    Ok(format!("{hour:02}:{minute:02}"))
+}
+
 fn days_in_month(year: i64, month: u32) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
@@ -112,6 +133,19 @@ mod tests {
         assert!(Date::parse("2026-02-30").is_err());
         assert!(Date::parse("10/01/2026").is_err());
         assert!(Date::parse("2026-13-01").is_err());
+    }
+
+    #[test]
+    fn clock_times_parse_and_zero_pad() {
+        assert_eq!(parse_clock("--arrive", "9:05").unwrap(), "09:05");
+        assert_eq!(parse_clock("--arrive", "23:59").unwrap(), "23:59");
+        assert_eq!(parse_clock("--depart", " 00:00 ").unwrap(), "00:00");
+        assert!(parse_clock("--arrive", "24:00").is_err());
+        assert!(parse_clock("--arrive", "10:60").is_err());
+        assert!(parse_clock("--arrive", "10:5").is_err());
+        assert!(parse_clock("--arrive", "1030").is_err());
+        let error = parse_clock("--depart", "25:99").unwrap_err();
+        assert!(error.message.contains("--depart"), "{}", error.message);
     }
 
     #[test]

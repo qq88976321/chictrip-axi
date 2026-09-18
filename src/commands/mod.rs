@@ -19,6 +19,8 @@ use crate::output::Table;
 use serde_json::Value;
 
 pub const MAX_LIMIT: usize = 200;
+pub const MAX_STAY_MIN: i64 = 1440;
+pub const MAX_LEG_MIN: i64 = 2880;
 
 pub fn validate_limit(limit: usize) -> Result<usize, AxiError> {
     if limit == 0 || limit > MAX_LIMIT {
@@ -29,15 +31,28 @@ pub fn validate_limit(limit: usize) -> Result<usize, AxiError> {
     Ok(limit)
 }
 
-pub fn parse_near(near: &str) -> Result<(f64, f64), AxiError> {
-    let bad = || AxiError::usage(format!("invalid --near '{near}'; expected LAT,LNG"));
-    let (lat, lng) = near.split_once(',').ok_or_else(bad)?;
+pub fn validate_minutes(flag: &str, value: i64, max: i64) -> Result<i64, AxiError> {
+    if !(0..=max).contains(&value) {
+        return Err(AxiError::usage(format!(
+            "{flag} must be between 0 and {max} minutes"
+        )));
+    }
+    Ok(value)
+}
+
+pub fn parse_point(flag: &str, text: &str) -> Result<(f64, f64), AxiError> {
+    let bad = || AxiError::usage(format!("invalid {flag} '{text}'; expected LAT,LNG"));
+    let (lat, lng) = text.split_once(',').ok_or_else(bad)?;
     let lat: f64 = lat.trim().parse().map_err(|_| bad())?;
     let lng: f64 = lng.trim().parse().map_err(|_| bad())?;
     if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lng) {
         return Err(bad());
     }
     Ok((lat, lng))
+}
+
+pub fn parse_near(near: &str) -> Result<(f64, f64), AxiError> {
+    parse_point("--near", near)
 }
 
 /// Empty strings are as absent as nulls, and the contract omits both.
@@ -212,6 +227,28 @@ mod tests {
         assert!(parse_near("35.71").is_err());
         assert!(parse_near("here,there").is_err());
         assert!(parse_near("100,0").is_err());
+    }
+
+    #[test]
+    fn minutes_are_bounded_and_name_their_flag() {
+        assert_eq!(validate_minutes("--stay", 0, MAX_STAY_MIN).unwrap(), 0);
+        assert_eq!(
+            validate_minutes("--stay", MAX_STAY_MIN, MAX_STAY_MIN).unwrap(),
+            MAX_STAY_MIN
+        );
+        assert!(validate_minutes("--stay", -1, MAX_STAY_MIN).is_err());
+        let error = validate_minutes("--custom", MAX_LEG_MIN + 1, MAX_LEG_MIN).unwrap_err();
+        assert_eq!(error.message, "--custom must be between 0 and 2880 minutes");
+    }
+
+    #[test]
+    fn points_name_the_flag_that_carried_them() {
+        assert_eq!(
+            parse_point("--at", "35.71,139.79").unwrap(),
+            (35.71, 139.79)
+        );
+        let error = parse_point("--at", "91,0").unwrap_err();
+        assert!(error.message.starts_with("invalid --at '91,0'"));
     }
 
     #[test]
