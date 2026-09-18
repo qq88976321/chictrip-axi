@@ -1,11 +1,11 @@
 //! `trip list`, `create`, `view`, `add`, `remove`, and `delete`.
 
 use super::{
-    MAX_STAY_MIN, count, count_line, select_days, stops_table, trips_table, validate_limit,
-    validate_minutes, value,
+    MAX_LEG_MIN, MAX_STAY_MIN, count, count_line, select_days, stops_table, trips_table,
+    validate_limit, validate_minutes, value,
 };
-use crate::api::trips::{self, Position};
-use crate::api::types::{Category, CreatedTrip, Day, EditInfo, TripDetail, Tsd};
+use crate::api::trips::{self, Position, TrafficMode};
+use crate::api::types::{Category, CreatedTrip, Day, EditInfo, Fare, TripDetail, Tsd};
 use crate::cli::{Context, TripCommand};
 use crate::datetime::{Date, parse_clock};
 use crate::error::{AxiError, ErrorCode};
@@ -74,6 +74,26 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             set,
             clear,
         } => note(ctx, trip_id, stop.as_deref(), set.as_deref(), *clear),
+        TripCommand::Leg {
+            trip_id,
+            stop,
+            mode,
+            route,
+            custom,
+            flight,
+            note,
+        } => leg(
+            ctx,
+            trip_id,
+            stop,
+            &LegFlags {
+                mode: mode.as_deref(),
+                route: route.as_deref(),
+                custom: *custom,
+                flight: *flight,
+                note: note.as_deref(),
+            },
+        ),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
     }
@@ -842,6 +862,257 @@ fn note_help(trip_id: &str, tsd_id: Option<&str>) -> Vec<String> {
             "Run `chictrip-axi trip note {trip_id} --set \"<text>\"` to change it"
         )],
     }
+}
+
+struct LegFlags<'a> {
+    mode: Option<&'a str>,
+    route: Option<&'a str>,
+    custom: Option<i64>,
+    flight: Option<i64>,
+    note: Option<&'a str>,
+}
+
+fn routable_mode(token: &str) -> Result<TrafficMode, AxiError> {
+    TrafficMode::from_token(token)
+        .filter(|mode| mode.is_routable())
+        .ok_or_else(|| {
+            let tokens: Vec<&str> = TrafficMode::ROUTABLE.iter().map(|m| m.token()).collect();
+            AxiError::usage(format!(
+                "unknown --mode '{token}'; valid modes: {}",
+                tokens.join(",")
+            ))
+        })
+}
+
+/// Metres to kilometres with one decimal, the way a map app shows them.
+fn kilometres(metres: Option<f64>) -> Value {
+    metres
+        .map(|m| Value::from((m / 100.0).round() / 10.0))
+        .unwrap_or(Value::Null)
+}
+
+fn fare_text(fare: &Option<Fare>) -> Value {
+    let Some(fare) = fare else {
+        return Value::Null;
+    };
+    let Some(amount) = fare.value else {
+        return Value::Null;
+    };
+    let currency = fare.currency.clone().unwrap_or_default();
+    let amount = if amount.fract() == 0.0 {
+        format!("{}", amount as i64)
+    } else {
+        format!("{amount}")
+    };
+    Value::from(format!("{currency} {amount}").trim().to_string())
+}
+
+/// The stop the leg arrives at, and where it comes from.
+fn leg_stop_object(stops: &[Tsd], index: usize, day: i64) -> Document {
+    let stop = &stops[index];
+    let mut object = Document::new();
+    object.set("tsd_id", value(&stop.id));
+    object.set("name", value(&stop.name));
+    object.set("day", day);
+    if let Some(previous) = index.checked_sub(1).and_then(|i| stops.get(i)) {
+        object.set("from", value(&previous.name));
+    }
+    object.set("traffic", value(&stop.arrival_traffic_type));
+    object.set("traffic_min", count(stop.arrival_traffic_time));
+    object
+}
+
+fn leg(ctx: &Context, trip_id: &str, tsd_id: &str, flags: &LegFlags) -> Result<Document, AxiError> {
+    let wanted_mode = flags.mode.map(routable_mode).transpose()?;
+    let duration = match (flags.custom, flags.flight) {
+        (Some(minutes), None) => Some((validate_minutes("--custom", minutes, MAX_LEG_MIN)?, false)),
+        (None, Some(minutes)) => Some((validate_minutes("--flight", minutes, MAX_LEG_MIN)?, true)),
+        _ => None,
+    };
+
+    let client = ctx.member_client("trip leg")?;
+    let update_time = trips::current_update_time(&client, trip_id)?;
+    let detail = trips::trip_detail(&client, trip_id, update_time)?;
+    let (day, index, row) = locate_stop(&detail, tsd_id).ok_or_else(|| {
+        AxiError::not_found(format!("stop {tsd_id} is not in trip {trip_id}")).with_help([format!(
+            "Run `chictrip-axi trip view {trip_id}` to list the stops and their tsd_id"
+        )])
+    })?;
+    let stops = day_stops(&detail, day);
+
+    let Some(route_id) = row.tsd_route_detail_id.clone().filter(|_| index > 0) else {
+        let name = row.name.clone().unwrap_or_default();
+        let error = AxiError::not_found(format!(
+            "{name} is the first stop of day {day} and has no leg into it"
+        ));
+        let next = stops.get(index + 1).and_then(|s| s.id.clone());
+        return Err(match next {
+            Some(next) => error.with_help([format!(
+                "Run `chictrip-axi trip leg {trip_id} --stop {next}` for the leg into the next stop"
+            )]),
+            None => error,
+        });
+    };
+
+    if let Some(route) = flags.route {
+        let current = row
+            .arrival_traffic_type
+            .as_deref()
+            .and_then(TrafficMode::from_api)
+            .filter(|mode| mode.is_routable());
+        if let Some(mode) = current {
+            let list = trips::route_list(&client, trip_id, &route_id, mode, update_time)?;
+            let already = list
+                .tsd_route_list
+                .iter()
+                .chain(list.tsd_route_transit_list.iter())
+                .any(|option| {
+                    option.poi_route_detail_id.as_deref() == Some(route) && option.is_selected
+                });
+            if already {
+                return Ok(leg_no_op(
+                    trip_id,
+                    &stops,
+                    index,
+                    day,
+                    "already selected (no-op)",
+                ));
+            }
+        }
+        let update_time = trips::set_route(&client, trip_id, &route_id, route, update_time)?;
+        return leg_after_write(&client, trip_id, tsd_id, update_time);
+    }
+
+    if let Some((minutes, is_flight)) = duration {
+        let mode = if is_flight {
+            TrafficMode::Flight
+        } else {
+            TrafficMode::Custom
+        };
+        let note = flags.note.unwrap_or_default();
+        let list = trips::route_list(&client, trip_id, &route_id, mode, update_time)?;
+        let stored = list.tsd_custom_route.unwrap_or_default();
+        let already = row.arrival_traffic_type.as_deref() == Some(mode.api())
+            && stored.duration == Some(minutes)
+            && stored.note.unwrap_or_default() == note;
+        if already {
+            return Ok(leg_no_op(
+                trip_id,
+                &stops,
+                index,
+                day,
+                "already set (no-op)",
+            ));
+        }
+        let update_time = trips::set_custom_route(
+            &client,
+            trip_id,
+            &route_id,
+            minutes,
+            note,
+            is_flight,
+            update_time,
+        )?;
+        return leg_after_write(&client, trip_id, tsd_id, update_time);
+    }
+
+    let mode = wanted_mode
+        .or_else(|| {
+            row.arrival_traffic_type
+                .as_deref()
+                .and_then(TrafficMode::from_api)
+                .filter(|mode| mode.is_routable())
+        })
+        .unwrap_or(TrafficMode::Driving);
+    let list = trips::route_list(&client, trip_id, &route_id, mode, update_time)?;
+
+    let mut table = Table::new(
+        &["route_id", "minutes", "km", "summary", "fare", "selected"],
+        &[],
+    );
+    for option in list
+        .tsd_route_list
+        .iter()
+        .chain(list.tsd_route_transit_list.iter())
+    {
+        table.push(&[
+            ("route_id", value(&option.poi_route_detail_id)),
+            ("minutes", count(option.duration)),
+            ("km", kilometres(option.distance)),
+            ("summary", value(&option.summary)),
+            ("fare", fare_text(&option.fare)),
+            ("selected", Value::from(option.is_selected)),
+        ]);
+    }
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    doc.set_object("stop", leg_stop_object(&stops, index, day));
+    doc.set("mode", mode.api());
+    doc.set("count", table.len() as i64);
+    let empty = table.is_empty();
+    doc.set_table("routes", table);
+    doc.set_primary("routes");
+    if let Some(custom) = list.tsd_custom_route.filter(|c| c.duration.is_some()) {
+        let mut object = Document::new();
+        object.set("minutes", count(custom.duration));
+        object.set("note", value(&custom.note));
+        object.set("traffic", value(&custom.traffic_type));
+        doc.set_object("custom", object);
+    }
+    let mut help = vec![
+        format!(
+            "Run `chictrip-axi trip leg {trip_id} --stop {tsd_id} --route <route_id>` to pick one"
+        ),
+        format!(
+            "Run `chictrip-axi trip leg {trip_id} --stop {tsd_id} --mode <driving|transit|walking|scooter>` for another mode"
+        ),
+        format!(
+            "Run `chictrip-axi trip leg {trip_id} --stop {tsd_id} --custom <min> --note \"<text>\"` for a leg chicTrip cannot route"
+        ),
+    ];
+    if empty {
+        help.remove(0);
+    }
+    doc.set_strings("help", &help);
+    Ok(doc)
+}
+
+fn leg_no_op(trip_id: &str, stops: &[Tsd], index: usize, day: i64, note: &str) -> Document {
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    doc.set_object("stop", leg_stop_object(stops, index, day));
+    doc.set_primary("stop");
+    doc.set("note", note);
+    doc
+}
+
+fn leg_after_write(
+    client: &crate::api::Client,
+    trip_id: &str,
+    tsd_id: &str,
+    update_time: i64,
+) -> Result<Document, AxiError> {
+    let detail = trips::trip_detail(client, trip_id, update_time)?;
+    let (day, index, _) = locate_stop(&detail, tsd_id)
+        .ok_or_else(|| AxiError::not_found(format!("stop {tsd_id} is not in trip {trip_id}")))?;
+    let stops = day_stops(&detail, day);
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    doc.set_object("stop", leg_stop_object(&stops, index, day));
+    doc.set_primary("stop");
+    doc.set("update_time", update_time);
+    doc.set_strings(
+        "help",
+        &[
+            format!("Run `chictrip-axi trip view {trip_id} --day {day} --full` to check the day"),
+            format!(
+                "Run `chictrip-axi trip leg {trip_id} --stop {tsd_id}` to list the routes again"
+            ),
+        ],
+    );
+    Ok(doc)
 }
 
 fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, AxiError> {

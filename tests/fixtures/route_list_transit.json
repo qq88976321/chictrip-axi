@@ -1,0 +1,26 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "tsdRouteDetailId": "route-2",
+  "tsdRouteList": null,
+  "tsdRouteTransitList": [
+   {
+    "poiRouteDetailId": "t-1",
+    "distance": 3200,
+    "duration": 14,
+    "isSelected": true,
+    "fare": {"currency": "JPY", "value": 180}
+   },
+   {
+    "poiRouteDetailId": "t-2",
+    "distance": 3900,
+    "duration": 22,
+    "isSelected": false,
+    "fare": {"currency": "JPY", "value": 210}
+   }
+  ],
+  "tsdCustomRoute": null
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

@@ -292,6 +292,35 @@ Without --set or --clear the note is printed in full. The same text again is a n
         #[arg(long)]
         clear: bool,
     },
+    /// Route options for the leg into a stop; pick one, or set a free-form one
+    #[command(after_help = "Examples:
+  chictrip-axi trip leg <trip-id> --stop <tsd-id>
+  chictrip-axi trip leg <trip-id> --stop <tsd-id> --mode transit
+  chictrip-axi trip leg <trip-id> --stop <tsd-id> --route <route-id>
+  chictrip-axi trip leg <trip-id> --stop <tsd-id> --custom 25 --note \"hotel shuttle\"
+  chictrip-axi trip leg <trip-id> --stop <tsd-id> --flight 195 --note \"BR198 TPE-NRT\"
+A leg belongs to the stop it arrives at, so a day's first stop has none. --mode only lists and defaults to the stop's current mode. The same leg again is a no-op.")]
+    Leg {
+        trip_id: String,
+        /// tsd_id from `trip view`
+        #[arg(long, value_name = "TSD-ID")]
+        stop: String,
+        /// driving, transit, walking, or scooter
+        #[arg(long, value_name = "MODE", conflicts_with_all = ["route", "duration"])]
+        mode: Option<String>,
+        /// route_id from the listing
+        #[arg(long, value_name = "ROUTE-ID", conflicts_with = "duration")]
+        route: Option<String>,
+        /// Free-form leg of MIN minutes
+        #[arg(long, value_name = "MIN", group = "duration")]
+        custom: Option<i64>,
+        /// Flight leg of MIN minutes
+        #[arg(long, value_name = "MIN", group = "duration")]
+        flight: Option<i64>,
+        /// Text kept with a --custom or --flight leg
+        #[arg(long, value_name = "TEXT", requires = "duration")]
+        note: Option<String>,
+    },
     /// Remove stops by their tsd_id
     #[command(after_help = "Examples:
   chictrip-axi trip remove <trip-id> --stop <tsd-id>

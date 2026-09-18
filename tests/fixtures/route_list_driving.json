@@ -1,0 +1,26 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "tsdRouteDetailId": "route-2",
+  "tsdRouteList": [
+   {
+    "poiRouteDetailId": "r-1",
+    "distance": 7107,
+    "duration": 17,
+    "summary": "Route 1",
+    "isSelected": true
+   },
+   {
+    "poiRouteDetailId": "r-2",
+    "distance": 5430,
+    "duration": 22,
+    "summary": "Route 6",
+    "isSelected": false
+   }
+  ],
+  "tsdRouteTransitList": null,
+  "tsdCustomRoute": null
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

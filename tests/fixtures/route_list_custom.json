@@ -1,0 +1,15 @@
+{
+ "apiStatus": "001",
+ "data": {
+  "tsdRouteDetailId": "route-3",
+  "tsdRouteList": null,
+  "tsdRouteTransitList": null,
+  "tsdCustomRoute": {
+   "duration": 25,
+   "note": "hotel shuttle",
+   "trafficType": "Custom"
+  }
+ },
+ "message": null,
+ "requestId": "40001531-0000-a100-b63f-84710c7967bb"
+}

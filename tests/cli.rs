@@ -28,6 +28,9 @@ const ADD_WHERE_FULL: &str = include_str!("fixtures/add_where_full.json");
 const ADD_WHERE_PREPENDED: &str = include_str!("fixtures/add_where_prepended.json");
 const EDIT_INFO: &str = include_str!("fixtures/edit_info.json");
 const EDIT_INFO_AFTER: &str = include_str!("fixtures/edit_info_after.json");
+const ROUTE_LIST_TRANSIT: &str = include_str!("fixtures/route_list_transit.json");
+const ROUTE_LIST_DRIVING: &str = include_str!("fixtures/route_list_driving.json");
+const ROUTE_LIST_CUSTOM: &str = include_str!("fixtures/route_list_custom.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -1123,6 +1126,228 @@ fn trip_note_rejects_set_together_with_clear_before_any_request() {
     );
     assert_eq!(code, 2, "{stdout}");
     assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+/// The third stop of day 1 in the fixture: a Custom 25 minute leg.
+const CUSTOM_STOP: &str = "d0000000-cccc-4ccc-8ccc-cccccccccccc";
+
+#[test]
+fn trip_leg_lists_transit_routes_with_fares_by_default() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetailRoute/GetRouteList" => Some(ok(ROUTE_LIST_TRANSIT)),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("leg-list");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "leg", TRIP, "--stop", STOP],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let list = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetailRoute/GetRouteList")
+        .expect("GetRouteList was called");
+    assert!(list.query.contains("trafficType=Transit"), "{}", list.query);
+    assert!(
+        list.query.contains("tsdRouteDetailId=route-2"),
+        "{}",
+        list.query
+    );
+    assert!(stdout.contains("\n  from: Azumabashi pier\n"), "{stdout}");
+    assert!(stdout.contains("\nmode: Transit\ncount: 2\n"), "{stdout}");
+    assert!(
+        stdout.contains("routes[2]{route_id,minutes,km,summary,fare,selected}:"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\n  \"t-1\",14,3.2,null,JPY 180,true\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("--route <route_id>"), "{stdout}");
+}
+
+#[test]
+fn trip_leg_on_a_days_first_stop_is_not_found() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("leg-first");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "leg",
+            TRIP,
+            "--stop",
+            "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ],
+    );
+    assert_eq!(code, 1, "{stdout}");
+    assert!(stdout.starts_with("error: not_found\n"), "{stdout}");
+    assert!(stdout.contains("first stop of day 1"), "{stdout}");
+    assert!(
+        stdout.contains(STOP),
+        "the help names the next stop: {stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetailRoute/GetRouteList".to_string()),
+        "a stop without a leg never asks for routes"
+    );
+}
+
+#[test]
+fn trip_leg_picks_a_route_and_skips_one_already_selected() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetailRoute/GetRouteList" => Some(ok(ROUTE_LIST_DRIVING)),
+        "/TravelScheduleDetail/SetRoute" => Some(envelope("001", "1789710950", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("leg-route");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "leg", TRIP, "--stop", STOP, "--route", "r-1"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("note: \"already selected (no-op)\""),
+        "{stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/SetRoute".to_string()),
+        "the selected route is never written again"
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "leg", TRIP, "--stop", STOP, "--route", "r-2"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/SetRoute")
+        .expect("SetRoute was called");
+    assert_eq!(write.method, "PUT");
+    assert_eq!(write.field("TsdRouteDetailId").as_deref(), Some("route-2"));
+    assert_eq!(write.field("PoiRouteDetailId").as_deref(), Some("r-2"));
+    assert!(stdout.contains("update_time: 1789710950"), "{stdout}");
+    assert_eq!(
+        server.paths().last().map(String::as_str),
+        Some("/TravelScheduleDetail/Get"),
+        "a write is read back"
+    );
+}
+
+#[test]
+fn trip_leg_sets_a_custom_or_flight_duration_unless_already_set() {
+    let server = trip_server(|request, _| match request.path.as_str() {
+        "/TravelScheduleDetailRoute/GetRouteList" => Some(ok(ROUTE_LIST_CUSTOM)),
+        "/TravelScheduleDetail/SetCustomRoute" => Some(envelope("001", "1789711000", "null")),
+        "/TravelScheduleDetail/SetFlightRoute" => Some(envelope("001", "1789711001", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("leg-custom");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "leg",
+            TRIP,
+            "--stop",
+            CUSTOM_STOP,
+            "--custom",
+            "25",
+            "--note",
+            "hotel shuttle",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(stdout.contains("note: \"already set (no-op)\""), "{stdout}");
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/SetCustomRoute".to_string()),
+        "the same leg is never written again"
+    );
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &["trip", "leg", TRIP, "--stop", CUSTOM_STOP, "--custom", "30"],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/SetCustomRoute")
+        .expect("SetCustomRoute was called");
+    assert_eq!(write.method, "PUT");
+    assert_eq!(write.field("Duration").as_deref(), Some("30"));
+    assert_eq!(write.field("Note").as_deref(), Some(""));
+    assert_eq!(write.field("TsdRouteDetailId").as_deref(), Some("route-3"));
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "leg",
+            TRIP,
+            "--stop",
+            CUSTOM_STOP,
+            "--flight",
+            "195",
+            "--note",
+            "BR198 TPE-NRT",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let write = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/SetFlightRoute")
+        .expect("SetFlightRoute was called");
+    assert_eq!(write.field("Duration").as_deref(), Some("195"));
+    assert_eq!(write.field("Note").as_deref(), Some("BR198 TPE-NRT"));
+}
+
+#[test]
+fn trip_leg_rejects_conflicting_setters_before_any_request() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("leg-usage");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    for args in [
+        vec![
+            "trip", "leg", TRIP, "--stop", STOP, "--route", "r-1", "--custom", "5",
+        ],
+        vec![
+            "trip", "leg", TRIP, "--stop", STOP, "--custom", "5", "--flight", "5",
+        ],
+        vec!["trip", "leg", TRIP, "--stop", STOP, "--note", "x"],
+        vec!["trip", "leg", TRIP, "--stop", STOP, "--mode", "bus"],
+    ] {
+        let (stdout, code) = run(&server, &sandbox.auth_file(), &args);
+        assert_eq!(code, 2, "{args:?} {stdout}");
+        assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    }
     assert!(server.requests().is_empty(), "usage errors never call out");
 }
 

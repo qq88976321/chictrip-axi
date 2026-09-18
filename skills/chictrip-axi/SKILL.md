@@ -48,6 +48,7 @@ Then run `chictrip-axi auth set --from-json -` and paste. `chictrip-axi auth sta
 - `chictrip-axi trip add <trip-id> --day N --poi ID...` - Add POIs to a day (skips duplicates)
 - `chictrip-axi trip edit <trip-id> --stop ID` - Change a stop's stay or times or category or name
 - `chictrip-axi trip note <trip-id> [--stop ID]` - Read or set the trip note or a stop's
+- `chictrip-axi trip leg <trip-id> --stop ID` - List or set how a stop is reached
 - `chictrip-axi trip remove <trip-id> --stop ID...` - Remove stops
 - `chictrip-axi trip delete <trip-id>` - Delete a whole trip
 - `chictrip-axi tour list` - Popular expert itineraries (--curated for editor picks)

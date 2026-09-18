@@ -3,7 +3,8 @@
 
 use super::Client;
 use super::types::{
-    AddWhereResult, AddedStop, EditInfo, Poi, SystemCover, TripDetail, TripSummary, UserLabel,
+    AddWhereResult, AddedStop, EditInfo, Poi, RouteList, SystemCover, TripDetail, TripSummary,
+    UserLabel,
 };
 use crate::error::{AxiError, ErrorCode};
 use serde_json::Value;
@@ -24,6 +25,78 @@ pub enum Position {
     Last,
     Best,
     Slot(String),
+}
+
+/// How a leg is travelled. `TRAFFIC_MODES` in `commands/trip.rs` is AddV2's
+/// own, smaller vocabulary and is not this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrafficMode {
+    Custom,
+    Driving,
+    Transit,
+    Walking,
+    TwoWheeler,
+    Flight,
+}
+
+impl TrafficMode {
+    /// The modes chicTrip can compute routes for.
+    pub const ROUTABLE: [TrafficMode; 4] = [
+        TrafficMode::Driving,
+        TrafficMode::Transit,
+        TrafficMode::Walking,
+        TrafficMode::TwoWheeler,
+    ];
+
+    pub fn api(self) -> &'static str {
+        match self {
+            TrafficMode::Custom => "Custom",
+            TrafficMode::Driving => "Driving",
+            TrafficMode::Transit => "Transit",
+            TrafficMode::Walking => "Walking",
+            TrafficMode::TwoWheeler => "TwoWheeler",
+            TrafficMode::Flight => "Flight",
+        }
+    }
+
+    pub fn token(self) -> &'static str {
+        match self {
+            TrafficMode::TwoWheeler => "scooter",
+            TrafficMode::Custom => "custom",
+            TrafficMode::Driving => "driving",
+            TrafficMode::Transit => "transit",
+            TrafficMode::Walking => "walking",
+            TrafficMode::Flight => "flight",
+        }
+    }
+
+    pub fn is_routable(self) -> bool {
+        Self::ROUTABLE.contains(&self)
+    }
+
+    /// Accepts the CLI token or chicTrip's own spelling, case-insensitively.
+    pub fn from_token(text: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|mode| text.eq_ignore_ascii_case(mode.token()) || Self::spells(*mode, text))
+    }
+
+    pub fn from_api(text: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|mode| Self::spells(*mode, text))
+    }
+
+    const ALL: [TrafficMode; 6] = [
+        TrafficMode::Custom,
+        TrafficMode::Driving,
+        TrafficMode::Transit,
+        TrafficMode::Walking,
+        TrafficMode::TwoWheeler,
+        TrafficMode::Flight,
+    ];
+
+    fn spells(mode: TrafficMode, text: &str) -> bool {
+        text.eq_ignore_ascii_case(mode.api())
+    }
 }
 
 pub fn list_trips(client: &Client) -> Result<Vec<TripSummary>, AxiError> {
@@ -339,6 +412,73 @@ pub fn set_trip_note(
     })
 }
 
+pub fn route_list(
+    client: &Client,
+    trip_id: &str,
+    route_id: &str,
+    mode: TrafficMode,
+    update_time: i64,
+) -> Result<RouteList, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let data = client.get(
+            "TravelScheduleDetailRoute/GetRouteList",
+            &[
+                ("tsdRouteDetailId", route_id.to_string()),
+                ("trafficType", mode.api().to_string()),
+                ("travelScheduleId", trip_id.to_string()),
+                ("TravelScheduleUpdateTime", time.to_string()),
+            ],
+        )?;
+        decode(data)
+    })
+}
+
+pub fn set_route(
+    client: &Client,
+    trip_id: &str,
+    route_id: &str,
+    poi_route_id: &str,
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("TsdRouteDetailId", route_id.to_string()),
+            ("PoiRouteDetailId", poi_route_id.to_string()),
+            ("TravelScheduleId", trip_id.to_string()),
+            ("travelScheduleUpdateTime", time.to_string()),
+        ];
+        let data = client.put_form("TravelScheduleDetail/SetRoute", &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
+pub fn set_custom_route(
+    client: &Client,
+    trip_id: &str,
+    route_id: &str,
+    minutes: i64,
+    note: &str,
+    flight: bool,
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    let path = if flight {
+        "TravelScheduleDetail/SetFlightRoute"
+    } else {
+        "TravelScheduleDetail/SetCustomRoute"
+    };
+    with_update_time(client, trip_id, update_time, |time| {
+        let form = [
+            ("TsdRouteDetailId", route_id.to_string()),
+            ("Duration", minutes.to_string()),
+            ("Note", note.to_string()),
+            ("TravelScheduleId", trip_id.to_string()),
+            ("travelScheduleUpdateTime", time.to_string()),
+        ];
+        let data = client.put_form(path, &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
 pub fn delete_trip(client: &Client, trip_id: &str) -> Result<(), AxiError> {
     client
         .delete_form("TravelSchedule/Delete", &[("id", trip_id.to_string())])
@@ -357,4 +497,32 @@ pub fn copy_tour(client: &Client, tour_id: &str) -> Result<(), AxiError> {
 fn decode<T: serde::de::DeserializeOwned>(data: Value) -> Result<T, AxiError> {
     serde_json::from_value(data)
         .map_err(|e| AxiError::internal(format!("chicTrip sent an unexpected shape: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn traffic_modes_round_trip_between_tokens_and_api_values() {
+        assert_eq!(
+            TrafficMode::from_token("scooter"),
+            Some(TrafficMode::TwoWheeler)
+        );
+        assert_eq!(
+            TrafficMode::from_token("TwoWheeler"),
+            Some(TrafficMode::TwoWheeler)
+        );
+        assert_eq!(
+            TrafficMode::from_token("TRANSIT"),
+            Some(TrafficMode::Transit)
+        );
+        assert_eq!(TrafficMode::from_token("bus"), None);
+        assert_eq!(TrafficMode::from_api("Flight"), Some(TrafficMode::Flight));
+        assert_eq!(TrafficMode::from_api("scooter"), None);
+        assert_eq!(TrafficMode::TwoWheeler.api(), "TwoWheeler");
+        assert!(!TrafficMode::Custom.is_routable());
+        assert!(!TrafficMode::Flight.is_routable());
+        assert!(TrafficMode::ROUTABLE.iter().all(|m| m.is_routable()));
+    }
 }
