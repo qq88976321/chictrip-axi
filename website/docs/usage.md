@@ -4,11 +4,11 @@
 chictrip-axi [COMMAND] [OPTIONS]
 ```
 
-Eighteen commands: sixteen over the chicTrip API, plus the two `setup`
-commands that wire the CLI into an agent's session. Reads work with no
-setup; the trip commands, other than `trip preview`, need a member token
-copied out of the browser. Sample values below are romanized, the live
-API answers in zh-TW.
+Twenty-four commands: twenty-two over the chicTrip API, plus the two
+`setup` commands that wire the CLI into an agent's session. Reads work
+with no setup; the trip commands, other than `trip preview`, and `poi
+create` need a member token copied out of the browser. Sample values
+below are romanized, the live API answers in zh-TW.
 
 ## Home view
 
@@ -18,12 +18,12 @@ first):
 ```
 $ chictrip-axi
 bin: ~/.local/bin/chictrip-axi
-description: Agent-first CLI for chicTrip: search places, read expert itineraries, build trips in your account
+description: Agent-first CLI for chicTrip: search places, read expert itineraries, build and edit trips in your account
 auth: guest
 tours[5]{id,name,destination,expert,likes}:
   "daebf5f2-...",Tokyo 7 days 6 nights,Japan,Mamo,4014
   ...
-commands[18]{command,summary}:
+commands[24]{command,summary}:
   auth set,Store a member token copied from the browser
   ...
 help[2]: ...
@@ -53,7 +53,7 @@ still needs to know what this tool does.
 | `tour list [--curated] [--page N] [--limit N]` | Popular expert itineraries, or the editor picks |
 | `tour view <tour-id> [--day N] [--full]` | An expert itinerary day by day |
 | `location search <keyword> [--limit N]` | Destination keys (country,city,area) for `trip create` |
-| `trip preview <trip-id> [--day N]` | Stops of any trip by id, without owning it |
+| `trip preview <trip-id> [--day N] [--full]` | Stops of any trip by id, without owning it; `--full` adds notes and legs |
 
 `trip preview` is the only `trip` command the guest token can run. It
 reads any trip whose id you have, shared or not: chicTrip gates the
@@ -71,11 +71,17 @@ is usually the `preViewTravelId` of a chicTrip share link.
 | `auth clear` | Forgets the stored session |
 | `trip list [--limit N]` | Your trips, newest first |
 | `trip create --name N --start D --end D --location K... [--traffic M] [--duplicate]` | An empty trip filed under one or more destination keys |
-| `trip view <trip-id> [--day N]` | Stops day by day, with the `tsd_id` |
-| `trip add <trip-id> --day N --poi ID... [--position last\|best] [--allow-duplicate]` | Appends POIs to a day |
+| `trip view <trip-id> [--day N] [--full]` | Stops day by day, with the `tsd_id`; `--full` adds `note`, `traffic`, `traffic_min`, `depart`, `category` |
+| `trip add <trip-id> --day N --poi ID... [--position last\|best\|first] [--after TSD-ID] [--allow-duplicate]` | Adds POIs to a day: at the end, at chicTrip's best slot, first, or after a stop |
+| `trip edit <trip-id> --stop TSD-ID [--stay MIN] [--arrive HH:MM\|auto] [--depart HH:MM\|auto] [--category TYPE] [--name TEXT]` | Changes a stop's stay, pinned times, category (takeOff/landing make it a flight), or name |
+| `trip note <trip-id> [--stop TSD-ID] [--set TEXT \| --clear]` | Reads, sets, or clears the trip note, or a stop's |
+| `trip leg <trip-id> --stop TSD-ID [--mode M \| --route ID \| --custom MIN \| --flight MIN] [--note TEXT]` | Lists the ways to reach a stop, or sets one |
+| `trip traffic <trip-id> --day N --mode M [--recompute]` | Sets a day's default travel mode; `--recompute` redoes every leg |
+| `trip move <trip-id> --stop TSD-ID (--after TSD-ID \| --position first\|last) [--day N]` | Moves a stop within its day, or into another day |
 | `trip remove <trip-id> --stop TSD-ID...` | Removes stops |
 | `trip delete <trip-id>` | Deletes the trip |
 | `tour copy <tour-id>` | Copies an expert itinerary into your trips |
+| `poi create --name TEXT --at LAT,LNG [--category TYPE] [--address TEXT] [--note TEXT]` | Files a private place chicTrip does not list, for `trip add` (not idempotent) |
 
 Every command keeps a concise `--help` with its flags, defaults, and
 two or three examples.
@@ -104,9 +110,10 @@ request; a token passed with `--token` or `CHICTRIP_AXI_TOKEN` is never
 rewritten.
 
 Token precedence: `--token`, then `CHICTRIP_AXI_TOKEN`, then the auth
-file, then chicTrip's public guest token. Trip commands, `trip preview`
-excepted, refuse the guest token locally, before any request, because
-chicTrip would answer with the demo account's data instead.
+file, then chicTrip's public guest token. Trip commands, `trip
+preview` excepted, and `poi create` refuse the guest token locally,
+before any request, because chicTrip would answer with the demo
+account's data instead.
 
 ## Plan a trip and write it
 
@@ -117,17 +124,25 @@ chictrip-axi tour list --limit 5
 chictrip-axi tour view <tour-id> --day 1
 chictrip-axi tour copy <tour-id>                        # or start from an expert itinerary
 chictrip-axi trip preview <other-trip-id> --day 1       # or read somebody else's trip by id
-chictrip-axi trip view <trip-id>
+chictrip-axi trip view <trip-id> --full
 chictrip-axi poi search "Kamakura" --limit 5
 chictrip-axi trip add <trip-id> --day 2 --poi <poi-id> --poi <poi-id>
+chictrip-axi trip edit <trip-id> --stop <tsd-id> --arrive 10:30 --stay 90
+chictrip-axi trip note <trip-id> --stop <tsd-id> --set "book the 10:00 slot"
+chictrip-axi trip leg <trip-id> --stop <tsd-id> --mode transit
+chictrip-axi trip move <trip-id> --stop <tsd-id> --position first
+chictrip-axi poi create --name "Our ryokan" --at 35.0116,135.7681 --category moon
 chictrip-axi trip remove <trip-id> --stop <tsd-id>
 chictrip-axi trip delete <trip-id>
 ```
 
 Mutations are idempotent where they can be: `trip add` skips a POI the
 day already contains, `trip create` returns the existing trip when the
-name and dates match, and `trip delete` succeeds on a trip that is
-already gone. All three exit `0`.
+name and dates match, `trip delete` succeeds on a trip that is already
+gone, and `trip edit`, `trip note`, `trip leg`, `trip traffic`, and
+`trip move` write nothing when the trip already matches the request.
+All of them exit `0`. `poi create` is the exception: private places are
+not searchable and cannot be deleted, so every run files another one.
 
 ## Agent integration
 
@@ -197,7 +212,7 @@ normal operation.
 ```
 chictrip-axi --help            # concise reference for this level
 chictrip-axi trip add --help   # flags, defaults, and examples for one command
-chictrip-axi --version         # bare version, e.g. chictrip-axi 0.0.1
+chictrip-axi --version         # bare version, e.g. chictrip-axi 0.1.0
 ```
 
 `-V` is a synonym for `--version`. Both print the bare version and exit
