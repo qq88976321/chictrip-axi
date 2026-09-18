@@ -143,8 +143,33 @@ fn add_where_slot(
         .ok_or_else(|| AxiError::not_found(format!("day {day} has no slot to add a stop into")))
 }
 
-/// Adds one POI and returns the trip's new update time. Retries once on a
-/// 004, which means another writer moved the trip on between the two calls.
+/// Runs `send` with the trip's update time, and once more with a re-read one
+/// when chicTrip answers 004: another writer moved the trip on in between.
+fn with_update_time<T>(
+    client: &Client,
+    trip_id: &str,
+    update_time: i64,
+    mut send: impl FnMut(i64) -> Result<T, AxiError>,
+) -> Result<T, AxiError> {
+    match send(update_time) {
+        Err(e) if e.code == ErrorCode::Conflict => {
+            let fresh = current_update_time(client, trip_id)?;
+            send(fresh)
+        }
+        result => result,
+    }
+}
+
+/// A mutation answers the trip's new update time as a bare integer, or under
+/// `travelScheduleUpdateTime` or `updateTime` when it answers an object.
+fn new_update_time(data: &Value, fallback: i64) -> i64 {
+    data.as_i64()
+        .or_else(|| data.get("travelScheduleUpdateTime").and_then(Value::as_i64))
+        .or_else(|| data.get("updateTime").and_then(Value::as_i64))
+        .unwrap_or(fallback)
+}
+
+/// Adds one POI and returns the trip's new update time.
 pub fn add_stop(
     client: &Client,
     trip_id: &str,
@@ -161,31 +186,19 @@ pub fn add_stop(
         .and_then(|c| c.id.clone())
         .unwrap_or_default();
     let name = poi.name.clone().unwrap_or_default();
-    let mut current = update_time;
-    for attempt in 0..2 {
+    with_update_time(client, trip_id, update_time, |time| {
         let form = [
             ("TravelScheduleId", trip_id.to_string()),
             ("Day", day.to_string()),
             ("PoiId", poi_id.clone()),
             ("AddWhereId", slot.clone()),
-            ("TravelScheduleUpdateTime", current.to_string()),
+            ("TravelScheduleUpdateTime", time.to_string()),
             ("TsdCoverMediaId", cover.clone()),
             ("TsdName", name.clone()),
         ];
-        match client.post_form("TravelScheduleDetail/Add", &form) {
-            Ok(data) => {
-                return Ok(data
-                    .get("travelScheduleUpdateTime")
-                    .and_then(Value::as_i64)
-                    .unwrap_or(current));
-            }
-            Err(e) if e.code == ErrorCode::Conflict && attempt == 0 => {
-                current = current_update_time(client, trip_id)?;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    unreachable!("the loop returns on both attempts")
+        let data = client.post_form("TravelScheduleDetail/Add", &form)?;
+        Ok(new_update_time(&data, time))
+    })
 }
 
 pub fn remove_stop(
@@ -195,23 +208,16 @@ pub fn remove_stop(
     tsd_id: &str,
     update_time: i64,
 ) -> Result<i64, AxiError> {
-    let mut current = update_time;
-    for attempt in 0..2 {
+    with_update_time(client, trip_id, update_time, |time| {
         let form = [
             ("TravelScheduleId", trip_id.to_string()),
             ("Day", day.to_string()),
             ("TsdId", tsd_id.to_string()),
-            ("TravelScheduleUpdateTime", current.to_string()),
+            ("TravelScheduleUpdateTime", time.to_string()),
         ];
-        match client.delete_form("TravelScheduleDetail/Delete", &form) {
-            Ok(data) => return Ok(data.as_i64().unwrap_or(current)),
-            Err(e) if e.code == ErrorCode::Conflict && attempt == 0 => {
-                current = current_update_time(client, trip_id)?;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    unreachable!("the loop returns on both attempts")
+        let data = client.delete_form("TravelScheduleDetail/Delete", &form)?;
+        Ok(new_update_time(&data, time))
+    })
 }
 
 pub fn delete_trip(client: &Client, trip_id: &str) -> Result<(), AxiError> {
