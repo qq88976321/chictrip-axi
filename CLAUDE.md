@@ -9,23 +9,36 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
 
 ## Quick facts
 
-- Milestone: trip previews and session integration (2026-09-18).
-  Eighteen commands (`auth set/status/clear`,
-  `trip list/create/view/preview/add/remove/delete`,
-  `tour list/view/copy`, `poi search/view`, `location search`,
+- Milestone: edit what is already in a trip (2026-09-19).
+  Twenty-four commands (`auth set/status/clear`,
+  `trip list/create/view/preview/add/edit/note/leg/traffic/move/remove/delete`,
+  `tour list/view/copy`, `poi search/view/create`, `location search`,
   `setup skill/hooks`) plus the home view, over the shared
   HTTP/output/error/auth layers. Designed in
-  `docs/design/axi-interface.md`, which also lists what was left out.
-  The chicTrip commands were verified live against api.chictrip.com.tw
-  with a member token on 2026-09-18, `trip create` included once it sent
-  a real system cover id: chicTrip's `TravelSchedule/AddV2` answers the
-  generic `002 A non-empty request body is required` when `CoverMediaId`
-  or the label id is empty or `LocationKey[]` is missing
-  (`docs/api/protocol.md`). `trip preview` reads any trip by id with the
-  guest token through `TravelScheduleDetail/Preview` (verified live
-  2026-09-18, a private trip of the test account included: chicTrip
-  gates that endpoint on nothing but the id); `setup skill` and
-  `setup hooks` touch no network at all.
+  `docs/design/axi-interface.md` (milestones 2 to 4), which also lists
+  what was left out (day operations, trip-level edits, best sort).
+  Live-verified against api.chictrip.com.tw with the test account
+  (`~/.config/chictrip-axi/auth.test.json`, probe trip `axi-probe-m4`;
+  ALWAYS through a scratchpad copy via `CHICTRIP_AXI_AUTH_FILE`, never
+  the real file) on 2026-09-18 and 2026-09-19: `trip create` once it
+  sent a real system cover id (chicTrip's `TravelSchedule/AddV2`
+  answers the generic `002 A non-empty request body is required` when
+  `CoverMediaId` or the label id is empty or `LocationKey[]` is
+  missing), and the milestone 4 endpoints
+  (`TravelScheduleDetail/GetEditInfo`+`Update`, the two
+  `GetNote`/`UpdateNote` pairs,
+  `SetRoute`/`SetCustomRoute`/`SetFlightRoute`/`SetDefaultRouteAndTsdAllDay`
+  with `TravelScheduleDetailRoute/GetRouteList`, `Sort`, `Copy`,
+  `Poi/AddCustomPoiForWeb`), which ALL take FORM bodies: a JSON body
+  gets that same generic 002, so the message never means "send JSON"
+  (`docs/api/protocol.md`). `GetAddWhere`'s `addWhereId` names the stop
+  a new one is inserted IN FRONT OF, and an empty day has one slot
+  named `first`. The read-back oracle for a live check is `trip view`,
+  NEVER `trip preview` (Preview lags a write by seconds and prints
+  `note: ""`). `trip preview` reads any trip by id with the guest token
+  through `TravelScheduleDetail/Preview` (chicTrip gates that endpoint
+  on nothing but the id); `setup skill` and `setup hooks` touch no
+  network at all.
 - Published 2026-09-17: PUBLIC GitHub repo `qq88976321/chictrip-axi`
   (remote `origin`, https), pushed by the user. VERIFIED the same day
   via the Actions API: the ci workflow is green on master and the
@@ -34,10 +47,11 @@ Workspace-wide procedure (routing, checklists, commit rules) comes from
   https://qq88976321.github.io/chictrip-axi/ (a pages run that starts
   before Pages is switched to "GitHub Actions" fails at
   `actions/configure-pages`; re-run it). Development on branch `master`
-  (cargo-release `allow-branch = ["master"]`). The version line starts
-  at 0.0.1 (first tag v0.0.1, 2026-09-17); later releases are
-  `just release patch|minor|major` and tags are SSH-signed
-  (release.toml `sign-tag`). Pushing is USER-ONLY.
+  (cargo-release `allow-branch = ["master"]`). The version line is at
+  0.1.0; `git tag -l` shows v0.0.1 (2026-09-17) and v0.1.0
+  (2026-09-18). Later releases are `just release patch|minor|major`
+  and tags are SSH-signed (release.toml `sign-tag`). Pushing is
+  USER-ONLY.
 - Toolchain: `cargo`/rustc 1.97.1 locally. Rust edition 2024, MSRV =
   1.85 (the edition floor). The CI msrv job stays commented until a
   1.85 build is verified.
