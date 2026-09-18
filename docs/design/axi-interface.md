@@ -27,12 +27,20 @@ during implementation: `trip create` cannot work without a destination
 key, see the corrections), the home view, and the shared
 HTTP/output/error/auth layers. Added in milestone 3: `trip preview
 <trip-id>` for other people's trips, `setup skill` with its `--check`
-gate, and `setup hooks`. Out (later milestones): rankings, nearby, comments,
-categories (designed in git history at `2834aac`), stop reordering and
-notes, a local UUID check on positional ids (an id chicTrip rejects is
-reported as chicTrip reports it), `--full` on `trip view`/`trip preview`
-to show a stop's `note`, and hooks for Codex (`~/.codex/hooks.json`) and
-OpenCode (a managed plugin).
+gate, and `setup hooks`. Added in milestone 4 (its own section below):
+`--full` on `trip view`/`trip preview` for a stop's note, leg, and
+category; exact insertion for `trip add` (`--position first`,
+`--after`); `trip edit`, `trip note`, `trip leg`, `trip traffic`,
+`trip move`; and `poi create` for a place chicTrip does not list. Out
+(later milestones): rankings, nearby, comments, categories (designed in
+git history at `2834aac`), day-level operations
+(`TravelSchedule/DeleteDay`, `UpdateStartDate`, `SortDay`), trip-level
+edits (`UpdateV3`: rename, dates, cover), collaboration, chicTrip's
+best sort (`PreviewBestSortByDayV2`/`SaveBestSortByDayV2`: 4 to 40
+stops per day and a save body that was not cracked), a local UUID check
+on positional ids (an id chicTrip rejects is reported as chicTrip
+reports it), and hooks for Codex (`~/.codex/hooks.json`) and OpenCode
+(a managed plugin).
 
 ## Command tree
 
@@ -43,9 +51,14 @@ chictrip-axi auth status
 chictrip-axi auth clear
 chictrip-axi trip list [--limit N]
 chictrip-axi trip create --name NAME --start DATE --end DATE --location KEY... [--traffic MODE] [--duplicate]
-chictrip-axi trip view <trip-id> [--day N]
-chictrip-axi trip preview <trip-id> [--day N]
-chictrip-axi trip add <trip-id> --day N --poi POI-ID... [--position last|best] [--allow-duplicate]
+chictrip-axi trip view <trip-id> [--day N] [--full]
+chictrip-axi trip preview <trip-id> [--day N] [--full]
+chictrip-axi trip add <trip-id> --day N --poi POI-ID... [--position last|best|first] [--after TSD-ID] [--allow-duplicate]
+chictrip-axi trip edit <trip-id> --stop TSD-ID [--stay MIN] [--arrive HH:MM|auto] [--depart HH:MM|auto] [--category TYPE] [--name TEXT]
+chictrip-axi trip note <trip-id> [--stop TSD-ID] [--set TEXT | --clear]
+chictrip-axi trip leg <trip-id> --stop TSD-ID [--mode driving|transit|walking|scooter | --route ROUTE-ID | --custom MIN [--note TEXT] | --flight MIN [--note TEXT]]
+chictrip-axi trip traffic <trip-id> --day N --mode custom|driving|transit|walking|scooter [--recompute]
+chictrip-axi trip move <trip-id> --stop TSD-ID (--after TSD-ID | --position first|last) [--day N]
 chictrip-axi trip remove <trip-id> --stop TSD-ID...
 chictrip-axi trip delete <trip-id>
 chictrip-axi tour list [--curated] [--page N] [--limit N]
@@ -53,6 +66,7 @@ chictrip-axi tour view <tour-id> [--day N] [--full]
 chictrip-axi tour copy <tour-id>
 chictrip-axi poi search <keyword> [--near LAT,LNG] [--limit N]
 chictrip-axi poi view <poi-id> [--full]
+chictrip-axi poi create --name TEXT --at LAT,LNG [--category TYPE] [--address TEXT] [--note TEXT]
 chictrip-axi location search <keyword> [--limit N]
 chictrip-axi setup skill [--check] [--out PATH]
 chictrip-axi setup hooks [--user] [--remove]
@@ -162,29 +176,35 @@ index still print and the exit code is 1.
 
 ```
 bin: ~/.local/bin/chictrip-axi
-description: Agent-first CLI for chicTrip: search places, read expert itineraries, build trips in your account
+description: Agent-first CLI for chicTrip: search places, read expert itineraries, build and edit trips in your account
 auth: member
 trips[3]{id,name,start,end,days}:
   fd4db85c-...,Tokyo temples,2026/10/01,2026/10/03,3
   ...
-commands[18]{command,summary}:
+commands[24]{command,summary}:
   auth set,Store a member token copied from the browser
   auth status,Show which token is in use and whether it works
   auth clear,Forget the stored member token
   trip list,My trips (newest first)
-  trip create --name --start --end,Create an empty trip
-  trip view <trip-id>,Stops of a trip day by day
-  trip preview <trip-id>,Stops of any trip by id (no login needed)
-  trip add <trip-id> --day N --poi ID...,Append POIs to a day (skips duplicates)
-  trip remove <trip-id> --stop ID...,Remove stops
-  trip delete <trip-id>,Delete a whole trip
-  tour list,Popular expert itineraries (--curated for editor picks)
-  tour view <tour-id>,An expert itinerary day by day
-  tour copy <tour-id>,Copy an expert itinerary into my trips
+  "trip create --name --start --end",Create an empty trip
+  "trip view <trip-id>","Stops of a trip day by day (--full for notes and legs)"
+  "trip preview <trip-id>",Stops of any trip by id (no login needed)
+  "trip add <trip-id> --day N --poi ID...",Add POIs to a day (skips duplicates)
+  "trip edit <trip-id> --stop ID",Change a stop's stay or times or category or name
+  "trip note <trip-id> [--stop ID]",Read or set the trip note or a stop's
+  "trip leg <trip-id> --stop ID",List or set how a stop is reached
+  "trip traffic <trip-id> --day N --mode M",Set a day's default travel mode
+  "trip move <trip-id> --stop ID",Move a stop within or across days
+  "trip remove <trip-id> --stop ID...",Remove stops
+  "trip delete <trip-id>",Delete a whole trip
+  tour list,"Popular expert itineraries (--curated for editor picks)"
+  "tour view <tour-id>",An expert itinerary day by day
+  "tour copy <tour-id>",Copy an expert itinerary into my trips
   poi search <keyword>,Find places and their ids
-  poi view <poi-id>,Address and hours and rating and description of a place
+  "poi view <poi-id>",Address and hours and rating and description of a place
+  "poi create --name --at",File a private place chicTrip does not list (not idempotent)
   location search <keyword>,Destination keys for trip create
-  setup skill,Write the agent skill file (--check verifies it)
+  setup skill,"Write the agent skill file (--check verifies it)"
   setup hooks,Install the Claude Code SessionStart hook on request
 help[2]:
   Run `chictrip-axi trip view <id>` to continue a trip above
@@ -535,7 +555,8 @@ the user's HOME.
 - D2 auth: embedded guest token for reads; member token in the auth
   file with automatic refresh (section "Authentication").
 - D3 scope: the write vertical slice above (14 commands + home view;
-  `location search` was added during implementation, see below).
+  `location search` was added during implementation, see below;
+  milestone 3 took the tree to 18 and milestone 4 to 24).
 - D4 live verification: the user places their tokens in
   `~/.config/chictrip-axi/auth.json`; the implementing agent may create
   a clearly named test trip in that account, exercise add/remove/view,
@@ -769,3 +790,300 @@ tokens a row. The evaluation:
 
 Decision: change nothing. The CLAUDE.md rule stands - the encoder's
 quoting is the encoder's rule, and no command hand-rolls around it.
+
+
+## Milestone 4: edit what is already in a trip
+
+Approved by the user on 2026-09-19 (decisions D5 to D8 below) and
+implemented the same day. Six parts, all over endpoints exercised live
+on the probe trip `axi-probe-m4` in the test account: `--full` on the
+two read commands, exact insertion for `trip add`, and the verbs `trip
+edit`, `trip note`, `trip leg` with `trip traffic`, `trip move`, plus
+`poi create`. The tree grows to twenty-four commands.
+
+### trip view --full and trip preview --full
+
+- No new request. `stops_table(days, full, with_tsd_id)` already knew
+  the detail columns; `--full` promotes `note`, `traffic`,
+  `traffic_min`, `depart`, `category` (the row's `categoryIcon`:
+  enterTainment, food, shop, moon, rentCar, train, plane,
+  chargingPoint, other, pin, or takeOff/transfer/landing on a flight
+  row) and `flight` from `--fields` extras to printed columns. `type`
+  keeps meaning `basic` or `flight`. `arrive` prefers the pinned
+  `customArrivalTime` when the row says that is the one the app shows,
+  and `depart` is printed only when a departure is pinned, because the
+  computed one is arrival plus stay.
+- `flight` prints `flightNumber`, which the web app never writes; it
+  is populated on expert tours only and stays for `tour view` parity.
+- `trip preview --full` shows the same columns without `tsd_id`.
+  Preview lags a write by seconds and answers `note: ""` for the trip
+  header, so it is never the read-back oracle; `trip view` is.
+- The stops schema without `--full` is unchanged byte for byte. The
+  `trip view` header gains a `note` field when the trip has one.
+
+```
+trip:
+  id: "3c1d0a2e-1111-4111-8111-111111111111"
+  name: Tokyo temples
+  start: 2026/10/01
+  end: 2026/10/03
+  days: 3
+  permission: Owner
+  update_time: 1789710463
+  note: Buy the 72h subway pass at Narita
+stops[3]{day,seq,arrive,stay_min,name,type,tsd_id,city,poi_id,note,traffic,traffic_min,depart,category,flight}:
+  1,1,"09:00",60,Azumabashi pier,basic,"b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",Tokyo,"edd5509c-d852-41d1-9d27-0139d6d9f8f5",null,Custom,0,null,pin,null
+  1,2,"10:30",90,"Senso-ji",basic,"c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",Tokyo,"8a48a94c-495f-44da-be0d-e1d7564f2b07","Reservation 19:00",Transit,12,"12:00",enterTainment,null
+  1,3,"12:25",45,Tokyo Skytree,basic,"d0000000-cccc-4ccc-8ccc-cccccccccccc",Tokyo,"f1111111-d852-41d1-9d27-0139d6d9f8f5",null,Custom,25,null,enterTainment,null
+```
+
+### trip add: --position first and --after
+
+- `GetAddWhere` answers one slot per day: `start`, one named after
+  each stop EXCEPT the first, and `end` (an empty day answers a single
+  slot named `first`). A slot named after a stop inserts the new one
+  IN FRONT of it, which the live run corrected (see below), so
+  `--position first` is the `start` slot and `--after X` is the slot
+  of the stop that FOLLOWS X, or `end` when X is last.
+- An anchor that is not in the chosen day is a `not_found` decided
+  from the one `trip view` read, before any write. `--after` and
+  `--position` together are a usage error (clap).
+- A batch holds one slot for every POI, except that `--position
+  first` switches to the day's old first stop after its first insert.
+  Either way `--poi A --poi B` keeps A before B.
+- Summary changes from "Append POIs" to "Add POIs": the verb no longer
+  implies the end of the day.
+
+### trip edit
+
+- Two requests per stop after `VerifyUpdateTime`: `GET
+  TravelScheduleDetail/GetEditInfo` (which needs the CURRENT update
+  time; `0` is a 004 here) for the sheet, then `PUT
+  TravelScheduleDetail/Update` with every field of the sheet and the
+  edited ones replaced, then a second `GetEditInfo` to print what
+  chicTrip now holds. Chained update time; a 004 is re-verified and
+  retried once.
+- Flags: `--stay MIN` (0 to 1440), `--arrive HH:MM|auto`, `--depart
+  HH:MM|auto` (`auto` sends `IsUseCustom*Time=0` and an empty time),
+  `--category TYPE` (an icon token from the sheet's own
+  `categoryList`; takeOff, transfer or landing turns the row into
+  `type: flight`), `--name TEXT`. At least one is required. Time and
+  minute syntax are validated before any network call.
+- No-op: when every requested value already equals the sheet, nothing
+  is written, `changed[0]:` and `note: already as requested (no-op)`,
+  exit 0.
+- Errors: an unknown `--stop` is a `not_found` (chicTrip answers `002
+  TSD Id not found`); an unknown `--category` is a `usage` error that
+  lists the twelve live tokens, after the one GET that learned them.
+
+```
+trip_id: "3c1d0a2e-1111-4111-8111-111111111111"
+stop:
+  tsd_id: "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+  name: "Senso-ji"
+  category: food
+  type: basic
+  arrive: "10:30"
+  arrive_custom: true
+  depart: "12:00"
+  depart_custom: true
+  stay_min: 120
+changed[2]: category,stay_min
+update_time: 1789710700
+help[2]: "Run `chictrip-axi trip view 3c1d0a2e-1111-4111-8111-111111111111 --full` to see every stop with its times","Run `chictrip-axi trip note 3c1d0a2e-1111-4111-8111-111111111111 --stop c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb --set \"<text>\"` to attach a note"
+```
+
+### trip note
+
+- Without `--set` or `--clear` it reads, from the one
+  `TravelScheduleDetail/Get` the command already does: the row's
+  `note` for a stop, the header's `note` for the trip. Printed in
+  full, because a note is the detail view of itself. With `--set TEXT`
+  it is `PUT TravelSchedule/UpdateNote` or `PUT
+  TravelScheduleDetail/UpdateNote`; `--clear` is `--set ""`. The two
+  together are a usage error.
+- Per-day notes do not exist on the platform, so there is no `--day`.
+- No-op: the stored text already equals the request, so nothing is
+  written, `status: unchanged (no-op)`, exit 0.
+- A write is not read back: the `001` is the oracle and Preview lags.
+
+```
+trip_id: "3c1d0a2e-1111-4111-8111-111111111111"
+stop_id: "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+name: "Senso-ji"
+note: "Reservation 19:00"
+help[1]: "Run `chictrip-axi trip note 3c1d0a2e-1111-4111-8111-111111111111 --stop c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb --set \"<text>\"` to change it"
+```
+
+### trip leg and trip traffic
+
+- A leg belongs to the stop it ARRIVES at; a day's first stop has none
+  (`tsdRouteDetailId` is null). `--stop` on a first stop is a
+  `not_found` that says so and names the next stop, before any write.
+- Listing (no setter flag): `GET
+  TravelScheduleDetailRoute/GetRouteList` for `--mode`, else the
+  stop's own mode when that one is routable, else driving. `--mode`
+  never writes. Transit rows carry a fare and no summary; driving rows
+  carry a summary and no fare.
+- Setting: `--route ROUTE-ID` is `SetRoute`, `--custom MIN [--note]`
+  is `SetCustomRoute`, `--flight MIN [--note]` is `SetFlightRoute`.
+  The three are mutually exclusive and `--note` requires one of the
+  last two. Mode tokens: driving, transit, walking, scooter
+  (chicTrip's `TwoWheeler`).
+- No-op: the leg already is what was asked (the route is `isSelected`,
+  or the stored free-form leg has the same type, duration and note):
+  nothing written, exit 0.
+- `trip traffic <trip> --day N --mode M [--recompute]` is `PUT
+  TravelScheduleDetail/SetDefaultRouteAndTsdAllDay` with
+  `isForceUpdateTsdRoute` = `--recompute`. Without it only the day's
+  default changes and new legs pick it up; with it every leg of the
+  day is recomputed, which overwrites hand-set ones, and the `--help`
+  says so. The answer carries the whole day, so there is no re-read.
+- Flight details: chicTrip has flight number and terminal fields on
+  the row but the web app never writes them, so the convention is
+  `--category takeOff|landing` on the stop plus the flight code in the
+  leg note (`--flight 180 --note "BR198 TPE-NRT"`).
+
+```
+trip_id: "3c1d0a2e-1111-4111-8111-111111111111"
+stop:
+  tsd_id: "c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+  name: "Senso-ji"
+  day: 1
+  from: Azumabashi pier
+  traffic: Transit
+  traffic_min: 12
+mode: Transit
+count: 2
+routes[2]{route_id,minutes,km,summary,fare,selected}:
+  "t-1",14,3.2,null,JPY 180,true
+  "t-2",22,3.9,null,JPY 210,false
+```
+
+```
+trip_id: "3c1d0a2e-1111-4111-8111-111111111111"
+day: 1
+traffic: Driving
+stops[3]{seq,arrive,stay_min,name,tsd_id,traffic,traffic_min}:
+  1,"09:00",60,Azumabashi pier,"b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",Custom,0
+  2,"10:08",90,"Senso-ji","c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb",Driving,8
+  3,"11:50",45,Tokyo Skytree,"d0000000-cccc-4ccc-8ccc-cccccccccccc",Driving,12
+update_time: 1789710800
+```
+
+### trip move
+
+- `PUT TravelScheduleDetail/Sort` with the whole TARGET day's ids in
+  their new order, computed locally from the read the command already
+  does. `--after TSD-ID` or `--position first|last`; one of them is
+  required (clap group), and `--after` naming the stop itself is a
+  usage error.
+- `--day N` moves the stop into another day with the same one call:
+  the live run answered the open question, and the stop keeps its id,
+  its note, its stay and its pinned times, so the app's Copy plus
+  Delete recipe is not needed and `copy_stop` was never built.
+- No-op: already in that place in that day, so nothing is written.
+
+```
+trip_id: "3c1d0a2e-1111-4111-8111-111111111111"
+moved:
+  tsd_id: "d0000000-cccc-4ccc-8ccc-cccccccccccc"
+  name: Tokyo Skytree
+  from_day: 1
+  day: 1
+  seq: 2
+stops[3]{seq,arrive,stay_min,name,tsd_id}:
+  1,"09:00",60,Azumabashi pier,"b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+  2,"12:25",45,Tokyo Skytree,"d0000000-cccc-4ccc-8ccc-cccccccccccc"
+  3,"10:30",90,"Senso-ji","c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+update_time: 1789711100
+```
+
+### poi create
+
+- `POST Poi/AddCustomPoiForWeb` with `name, categoryId, longitude,
+  latitude, address, description`, urlencoded like every other write:
+  the web app sends multipart with a media part, but the live run
+  showed neither is required, so no multipart transport was built.
+  `categoryId` is resolved from `--category` through `GET
+  PoiClassification/GetCustomPoiCategory`, the seven icons the app's
+  own form offers, and the default is `enterTainment` because that
+  endpoint has no `other`.
+- Validation before the network: `--at` parses like `--near` (lat -90
+  to 90, lng -180 to 180) and `--name` must be non-empty.
+- NOT idempotent, and the `--help`, a `note:` line, the skill and the
+  README all say so: a private place is not searchable, so the CLI
+  cannot find an existing one, and chicTrip has no delete endpoint.
+  Every run files a permanent row.
+
+```
+poi:
+  id: "7d2e5a10-6666-4666-8666-666666666666"
+  name: Aunt Mei's flat
+  category: food
+  lat: 35.7111
+  lng: 139.7963
+  address: "2-3-1 Asakusa"
+note: private to this account; not searchable; chicTrip cannot delete it
+help[2]: "Run `chictrip-axi trip add <trip-id> --day <n> --poi 7d2e5a10-6666-4666-8666-666666666666` to put it in a trip","Run `chictrip-axi poi view 7d2e5a10-6666-4666-8666-666666666666` to read it back"
+```
+
+### Decisions (confirmed by the user, 2026-09-19)
+
+- D5 scope: all six groups in one milestone (view `--full`, add
+  positions, edit, note, leg with traffic, move, poi create). Best
+  sort, day operations and trip-level edits stay out.
+- D6 verbs: flat verbs under `trip` addressed by `--stop TSD-ID`
+  (`trip edit/note/leg/move ... --stop`), the way `trip remove --stop`
+  already worked; no `trip stop <verb>` sub-noun. `trip traffic` takes
+  `--day` because its unit is the day.
+- D7 live verification: the implementing agent ran the per-command
+  script against the test account (a scratchpad copy of
+  `auth.test.json` through `CHICTRIP_AXI_AUTH_FILE`, so a token
+  refresh never rewrites the real file) on the probe trip
+  `axi-probe-m4`, using day 4 as the scratch day and restoring days 1
+  to 3. `trip view` is the oracle, never `trip preview`.
+- D8 platform facts that shaped the commands: a leg belongs to the
+  arriving stop and a day's first stop has none; Preview lags a write
+  and hides the trip note; per-day notes do not exist; a flight is a
+  TsdCategory on the stop plus a Flight leg with the code in its note,
+  because the row's flight fields are never written by the web app;
+  every write is form-encoded and a JSON body gets the same generic
+  002 as a missing field; the stop table's `type` column is `tsdType`,
+  so the icon vocabulary is called `category` everywhere (the flag,
+  the column, and `poi search`).
+
+### Live-run corrections (2026-09-19)
+
+- `addWhereId` names the stop the new one is inserted IN FRONT OF, not
+  the stop it follows, and an empty day answers a single slot named
+  `first` rather than `start` and `end`. So `--position first` sends
+  `start` and `--after X` sends the id of the stop after X. The
+  `Position` enum became `Last | Best | Slot(addWhereId)` and the
+  command translates, instead of the designed `First | After(id)`.
+- `TravelScheduleDetail/Add` answers `{tsdInfo, travelScheduleUpdateTime}`
+  and `tsdInfo.id` is the new stop, so the batch chains on the id
+  rather than guessing from the POI id. An empty `TsdCoverMediaId`
+  makes the same call answer the generic 002.
+- `GetEditInfo` with an unknown `tsdId` answers `002 TSD Id not found`
+  with a null payload, not a 001 with no data, so the not_found is
+  mapped from that message inside the recipe and the shared apiStatus
+  table is untouched.
+- `TravelScheduleDetail/Sort` accepts `MoveOutDay != MoveInDay` and
+  moves the stop keeping its id, note and stay, so `trip move --day`
+  is one call and `copy_stop` was never built.
+- `Poi/AddCustomPoiForWeb` accepts `application/x-www-form-urlencoded`
+  with no media part, so `Method::PostMultipart` and the hand-built
+  multipart body were never built either.
+- `PoiClassification/GetAll?page=1` answers an object
+  `{page, list[], hasNextPage}` mixing Category and Tag rows, so
+  `poi create` resolves its `--category` through
+  `GetCustomPoiCategory` and defaults to `enterTainment`.
+- `GetRouteList` answers `null`, not `[]`, for an empty route list,
+  which `#[serde(default)]` does not cover; the two list fields go
+  through a `null_as_empty` helper in `types.rs`.
+- `trip edit` prints `changed` in field order (name, category,
+  stay_min, arrive, depart), so the design's `changed[2]:
+  stay_min,category` reads `category,stay_min`.
+- The `trip view` header gained `note`; only the stops schema is
+  unchanged byte for byte.
