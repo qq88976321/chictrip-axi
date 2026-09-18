@@ -337,6 +337,28 @@ A leg belongs to the stop it arrives at, so a day's first stop has none. --mode 
         #[arg(long)]
         recompute: bool,
     },
+    /// Move a stop within its day, or into another day
+    #[command(group(clap::ArgGroup::new("target").required(true).args(["after", "position"])))]
+    #[command(after_help = "Examples:
+  chictrip-axi trip move <trip-id> --stop <tsd-id> --after <tsd-id>
+  chictrip-axi trip move <trip-id> --stop <tsd-id> --position first
+  chictrip-axi trip move <trip-id> --stop <tsd-id> --day 2 --position last
+The stop keeps its id, its note, and its pinned times. A stop already in that place is a no-op.")]
+    Move {
+        trip_id: String,
+        /// tsd_id from `trip view`
+        #[arg(long, value_name = "TSD-ID")]
+        stop: String,
+        /// Put the stop right after this one
+        #[arg(long, value_name = "TSD-ID")]
+        after: Option<String>,
+        /// first or last
+        #[arg(long, value_name = "WHERE")]
+        position: Option<String>,
+        /// Target day; defaults to the stop's own day
+        #[arg(long, value_name = "N")]
+        day: Option<i64>,
+    },
     /// Remove stops by their tsd_id
     #[command(after_help = "Examples:
   chictrip-axi trip remove <trip-id> --stop <tsd-id>

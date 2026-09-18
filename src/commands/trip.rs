@@ -100,6 +100,20 @@ pub fn run(ctx: &Context, command: &TripCommand) -> Result<Document, AxiError> {
             mode,
             recompute,
         } => traffic(ctx, trip_id, *day, mode, *recompute),
+        TripCommand::Move {
+            trip_id,
+            stop,
+            after,
+            position,
+            day,
+        } => move_stop(
+            ctx,
+            trip_id,
+            stop,
+            after.as_deref(),
+            position.as_deref(),
+            *day,
+        ),
         TripCommand::Remove { trip_id, stop } => remove(ctx, trip_id, stop),
         TripCommand::Delete { trip_id } => delete(ctx, trip_id),
     }
@@ -1207,6 +1221,161 @@ fn traffic(
     Ok(doc)
 }
 
+/// Where a moved stop should end up inside its target day.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MoveTarget {
+    First,
+    Last,
+    After(String),
+}
+
+/// The target day's ids in their new order, the moved stop included.
+fn moved_order(ids: &[String], stop: &str, target: &MoveTarget) -> Vec<String> {
+    let mut order: Vec<String> = ids.iter().filter(|id| *id != stop).cloned().collect();
+    let at = match target {
+        MoveTarget::First => 0,
+        MoveTarget::Last => order.len(),
+        MoveTarget::After(anchor) => order
+            .iter()
+            .position(|id| id == anchor)
+            .map_or(order.len(), |index| index + 1),
+    };
+    order.insert(at, stop.to_string());
+    order
+}
+
+fn move_stop(
+    ctx: &Context,
+    trip_id: &str,
+    tsd_id: &str,
+    after: Option<&str>,
+    position: Option<&str>,
+    day: Option<i64>,
+) -> Result<Document, AxiError> {
+    let target = match (after, position) {
+        (Some(anchor), _) if anchor == tsd_id => {
+            return Err(AxiError::usage("--after names the stop itself"));
+        }
+        (Some(anchor), _) => MoveTarget::After(anchor.to_string()),
+        (None, Some(where_to)) => match where_to.to_ascii_lowercase().as_str() {
+            "first" => MoveTarget::First,
+            "last" => MoveTarget::Last,
+            other => {
+                return Err(AxiError::usage(format!(
+                    "unknown --position '{other}'; valid values: first,last"
+                )));
+            }
+        },
+        (None, None) => {
+            return Err(AxiError::usage(
+                "pass --after <tsd-id> or --position first|last",
+            ));
+        }
+    };
+    if day.is_some_and(|day| day < 1) {
+        return Err(AxiError::usage("--day starts at 1"));
+    }
+
+    let client = ctx.member_client("trip move")?;
+    let update_time = trips::current_update_time(&client, trip_id)?;
+    let detail = trips::trip_detail(&client, trip_id, update_time)?;
+    let (from_day, _, row) = locate_stop(&detail, tsd_id).ok_or_else(|| {
+        AxiError::not_found(format!("stop {tsd_id} is not in trip {trip_id}")).with_help([format!(
+            "Run `chictrip-axi trip view {trip_id}` to list the stops and their tsd_id"
+        )])
+    })?;
+    let to_day = day.unwrap_or(from_day);
+    let total_days = detail
+        .travel_schedule_info
+        .total_day
+        .unwrap_or(detail.day_list.len() as i64);
+    if to_day > total_days {
+        return Err(AxiError::not_found(format!(
+            "day {to_day} is outside this trip, which has {total_days} days"
+        )));
+    }
+
+    let current: Vec<String> = day_stops(&detail, to_day)
+        .iter()
+        .filter_map(|s| s.id.clone())
+        .collect();
+    if let MoveTarget::After(anchor) = &target {
+        if !current.iter().any(|id| id == anchor) {
+            return Err(AxiError::not_found(format!(
+                "stop {anchor} is not in day {to_day} of this trip"
+            ))
+            .with_help([format!(
+                "Run `chictrip-axi trip view {trip_id} --day {to_day}` to list that day"
+            )]));
+        }
+    }
+    let order = moved_order(&current, tsd_id, &target);
+
+    if to_day == from_day && order == current {
+        let mut doc = Document::new();
+        doc.set("trip_id", trip_id);
+        doc.set_object(
+            "moved",
+            moved_object(&row, from_day, to_day, &order, tsd_id),
+        );
+        doc.set_primary("moved");
+        doc.set("note", "already in place (no-op)");
+        return Ok(doc);
+    }
+
+    let update_time = trips::sort_day(
+        &client,
+        trip_id,
+        from_day,
+        to_day,
+        tsd_id,
+        &order,
+        update_time,
+    )?;
+    let after_move = trips::trip_detail(&client, trip_id, update_time)?;
+    let stops = day_stops(&after_move, to_day);
+    let ids: Vec<String> = stops.iter().filter_map(|s| s.id.clone()).collect();
+
+    let mut doc = Document::new();
+    doc.set("trip_id", trip_id);
+    doc.set_object("moved", moved_object(&row, from_day, to_day, &ids, tsd_id));
+    let day_list = vec![Day {
+        day: Some(to_day),
+        tsd_list: stops,
+        ..Day::default()
+    }];
+    let mut table = stops_table(&day_list, false, true);
+    table.select(&[
+        "seq".into(),
+        "arrive".into(),
+        "stay_min".into(),
+        "name".into(),
+        "tsd_id".into(),
+    ])?;
+    doc.set_table("stops", table);
+    doc.set_primary("stops");
+    doc.set("update_time", update_time);
+    doc.set_strings(
+        "help",
+        &[format!(
+            "Run `chictrip-axi trip view {trip_id} --day {to_day} --full` to check the legs after the move"
+        )],
+    );
+    Ok(doc)
+}
+
+fn moved_object(row: &Tsd, from_day: i64, to_day: i64, order: &[String], tsd_id: &str) -> Document {
+    let mut object = Document::new();
+    object.set("tsd_id", tsd_id);
+    object.set("name", value(&row.name));
+    object.set("from_day", from_day);
+    object.set("day", to_day);
+    if let Some(index) = order.iter().position(|id| id == tsd_id) {
+        object.set("seq", index as i64 + 1);
+    }
+    object
+}
+
 fn remove(ctx: &Context, trip_id: &str, stops: &[String]) -> Result<Document, AxiError> {
     let client = ctx.member_client("trip remove")?;
     let mut update_time = trips::current_update_time(&client, trip_id)?;
@@ -1280,6 +1449,20 @@ fn day_stops(detail: &TripDetail, day: i64) -> Vec<crate::api::types::Tsd> {
 mod tests {
     use super::*;
     use crate::api::types::TripInfo;
+
+    #[test]
+    fn moved_order_places_first_last_and_after() {
+        let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(moved_order(&ids, "c", &MoveTarget::First), ["c", "a", "b"]);
+        assert_eq!(moved_order(&ids, "a", &MoveTarget::Last), ["b", "c", "a"]);
+        assert_eq!(
+            moved_order(&ids, "c", &MoveTarget::After("a".into())),
+            ["a", "c", "b"]
+        );
+        assert_eq!(moved_order(&ids, "b", &MoveTarget::After("a".into())), ids);
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(moved_order(&empty, "x", &MoveTarget::Last), ["x"]);
+    }
 
     #[test]
     fn an_empty_trip_still_prints_a_stops_header() {

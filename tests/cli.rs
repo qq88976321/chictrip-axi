@@ -32,6 +32,7 @@ const ROUTE_LIST_TRANSIT: &str = include_str!("fixtures/route_list_transit.json"
 const ROUTE_LIST_DRIVING: &str = include_str!("fixtures/route_list_driving.json");
 const ROUTE_LIST_CUSTOM: &str = include_str!("fixtures/route_list_custom.json");
 const DAY_TRAFFIC: &str = include_str!("fixtures/day_traffic.json");
+const TRIP_DETAIL_FULL_MOVED: &str = include_str!("fixtures/trip_detail_full_moved.json");
 const SYSTEM_COVERS: &str = include_str!("fixtures/system_covers.json");
 const LOCATION_SEARCH: &str = include_str!("fixtures/location_search.json");
 
@@ -1456,6 +1457,149 @@ fn trip_traffic_rejects_an_unknown_mode_before_any_request() {
         stdout.contains("valid modes: custom,driving,transit,walking,scooter"),
         "{stdout}"
     );
+    assert!(server.requests().is_empty(), "usage errors never call out");
+}
+
+#[test]
+fn trip_move_reorders_the_day_with_the_full_id_list() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/TravelScheduleDetail/Get" if seen > 0 => Some(ok(TRIP_DETAIL_FULL_MOVED)),
+        "/TravelScheduleDetail/Sort" => Some(envelope("001", "1789711100", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("move");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "move",
+            TRIP,
+            "--stop",
+            CUSTOM_STOP,
+            "--after",
+            "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let sort = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/Sort")
+        .expect("Sort was called");
+    assert_eq!(sort.method, "PUT");
+    assert_eq!(sort.field("MoveOutDay").as_deref(), Some("1"));
+    assert_eq!(sort.field("MoveInDay").as_deref(), Some("1"));
+    assert_eq!(sort.field("MoveTsdId").as_deref(), Some(CUSTOM_STOP));
+    assert!(
+        sort.body.contains(
+            "TsdIdList%5B%5D=b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa&TsdIdList%5B%5D=d0000000-cccc-4ccc-8ccc-cccccccccccc&TsdIdList%5B%5D=c9e2f004-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        ),
+        "{}",
+        sort.body
+    );
+    assert!(
+        stdout.contains("\n  from_day: 1\n  day: 1\n  seq: 2\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("stops[3]{seq,arrive,stay_min,name,tsd_id}:"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("update_time: 1789711100"), "{stdout}");
+}
+
+#[test]
+fn trip_move_into_another_day_sends_that_days_list() {
+    let server = trip_server(|request, seen| match request.path.as_str() {
+        "/TravelScheduleDetail/Get" if seen > 0 => Some(ok(TRIP_DETAIL_FULL_MOVED)),
+        "/TravelScheduleDetail/Sort" => Some(envelope("001", "1789711200", "null")),
+        _ => None,
+    });
+    let sandbox = Sandbox::new("move-day");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "move",
+            TRIP,
+            "--stop",
+            CUSTOM_STOP,
+            "--day",
+            "2",
+            "--position",
+            "last",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    let sort = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path == "/TravelScheduleDetail/Sort")
+        .expect("Sort was called");
+    assert_eq!(sort.field("MoveOutDay").as_deref(), Some("1"));
+    assert_eq!(sort.field("MoveInDay").as_deref(), Some("2"));
+    assert!(
+        sort.body.contains(
+            "TsdIdList%5B%5D=e0000000-dddd-4ddd-8ddd-dddddddddddd&TsdIdList%5B%5D=d0000000-cccc-4ccc-8ccc-cccccccccccc"
+        ),
+        "the target day's list, the moved stop included: {}",
+        sort.body
+    );
+}
+
+#[test]
+fn trip_move_to_the_current_place_is_a_no_op() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("move-noop");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    let (stdout, code) = run(
+        &server,
+        &sandbox.auth_file(),
+        &[
+            "trip",
+            "move",
+            TRIP,
+            "--stop",
+            STOP,
+            "--after",
+            "b2d11753-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        ],
+    );
+    assert_eq!(code, 0, "{stdout}");
+    assert!(
+        stdout.contains("note: \"already in place (no-op)\""),
+        "{stdout}"
+    );
+    assert!(
+        !server
+            .paths()
+            .contains(&"/TravelScheduleDetail/Sort".to_string()),
+        "a no-op never writes"
+    );
+}
+
+#[test]
+fn trip_move_without_a_target_is_a_usage_error_before_any_request() {
+    let server = trip_server(|_, _| None);
+    let sandbox = Sandbox::new("move-usage");
+    sandbox.write_auth(MEMBER_TOKEN, "refresh-1");
+
+    for args in [
+        vec!["trip", "move", TRIP, "--stop", STOP],
+        vec!["trip", "move", TRIP, "--stop", STOP, "--after", STOP],
+        vec!["trip", "move", TRIP, "--stop", STOP, "--position", "middle"],
+    ] {
+        let (stdout, code) = run(&server, &sandbox.auth_file(), &args);
+        assert_eq!(code, 2, "{args:?} {stdout}");
+        assert!(stdout.starts_with("error: usage\n"), "{stdout}");
+    }
     assert!(server.requests().is_empty(), "usage errors never call out");
 }
 

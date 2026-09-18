@@ -505,6 +505,35 @@ pub fn set_day_traffic(
     })
 }
 
+/// Reorders a day. `order` is the WHOLE target day in its new order, the
+/// moved stop included; `from_day` and `to_day` differ when the stop crosses
+/// days, which chicTrip accepts and which keeps the stop's id and note
+/// (verified live 2026-09-19).
+pub fn sort_day(
+    client: &Client,
+    trip_id: &str,
+    from_day: i64,
+    to_day: i64,
+    tsd_id: &str,
+    order: &[String],
+    update_time: i64,
+) -> Result<i64, AxiError> {
+    with_update_time(client, trip_id, update_time, |time| {
+        let mut form = vec![
+            ("TravelScheduleId", trip_id.to_string()),
+            ("MoveOutDay", from_day.to_string()),
+            ("MoveInDay", to_day.to_string()),
+            ("MoveTsdId", tsd_id.to_string()),
+        ];
+        for id in order {
+            form.push(("TsdIdList[]", id.clone()));
+        }
+        form.push(("travelScheduleUpdateTime", time.to_string()));
+        let data = client.put_form("TravelScheduleDetail/Sort", &form)?;
+        Ok(new_update_time(&data, time))
+    })
+}
+
 pub fn delete_trip(client: &Client, trip_id: &str) -> Result<(), AxiError> {
     client
         .delete_form("TravelSchedule/Delete", &[("id", trip_id.to_string())])

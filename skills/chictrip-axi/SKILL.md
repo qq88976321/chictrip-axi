@@ -50,6 +50,7 @@ Then run `chictrip-axi auth set --from-json -` and paste. `chictrip-axi auth sta
 - `chictrip-axi trip note <trip-id> [--stop ID]` - Read or set the trip note or a stop's
 - `chictrip-axi trip leg <trip-id> --stop ID` - List or set how a stop is reached
 - `chictrip-axi trip traffic <trip-id> --day N --mode M` - Set a day's default travel mode
+- `chictrip-axi trip move <trip-id> --stop ID` - Move a stop within or across days
 - `chictrip-axi trip remove <trip-id> --stop ID...` - Remove stops
 - `chictrip-axi trip delete <trip-id>` - Delete a whole trip
 - `chictrip-axi tour list` - Popular expert itineraries (--curated for editor picks)
